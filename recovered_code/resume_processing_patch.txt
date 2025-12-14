@@ -1,0 +1,61 @@
+INSTRUCTIONS: Update the processResumeInBackground function in backend/routes/resumes.js to use the new LLM RAG extraction method.
+
+FIND this section in resumes.js (around line 700-750):
+
+  // Background processing function
+  async function processResumeInBackground(resumeId, resumeText) {
+    try {
+      const resume = await Resume.findById(resumeId);
+      if (!resume) return;
+
+      // Update status
+      resume.status = 'parsing';
+      await resume.save();
+
+      // TODO: Implement more sophisticated resume parsing
+      // For now, create basic parsed data structure
+      const safeText = (resumeText || '').trim();
+      const parsedData = {
+        fullText: safeText,
+        summary: safeText ? safeText.substring(0, 200) + '...' : '',
+        experience: [],
+        education: [],
+        skills: {
+          technical: [],
+          soft: []
+        }
+      };
+
+      // Persist extracted text into parsedData.fullText and originalText so frontend and NLP pipelines can use it
+      resume.parsedData = parsedData;
+      resume.originalText = safeText;
+      resume.status = 'parsed';
+      await resume.save();
+
+      console.log(`Resume ${resumeId} processed successfully`);
+
+REPLACE with:
+
+  // Background processing function
+  async function processResumeInBackground(resumeId, resumeText) {
+    try {
+      const resume = await Resume.findById(resumeId);
+      if (!resume) return;
+
+      // Update status
+      resume.status = 'parsing';
+      await resume.save();
+
+      // Use LLM RAG extraction for structured data
+      console.log('Extracting resume data using LLM RAG...');
+      const extractedData = await aiService.extractResumeData(resumeText);
+
+      // Persist extracted data into parsedData
+      resume.parsedData = extractedData;
+      resume.originalText = resumeText;
+      resume.status = 'parsed';
+      await resume.save();
+
+      console.log(`Resume ${resumeId} processed successfully with structured extraction`);
+
+This change enables the resume processing to use the new LLM RAG extraction method that provides structured data extraction with fallback to heuristic methods when AI is unavailable.

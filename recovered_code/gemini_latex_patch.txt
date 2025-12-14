@@ -1,0 +1,82 @@
+INSTRUCTIONS: Update the generateLaTeXResume method in aiService.js to use Gemini API instead of OpenAI for LaTeX generation.
+
+FIND this section in aiService.js (around line 300-350):
+
+  // Generate LaTeX formatted resume
+  async generateLaTeXResume(content) {
+    if (!this.checkAvailability()) {
+      // ... fallback code remains the same ...
+    }
+
+    try {
+      const prompt = `
+        Generate a professional LaTeX formatted resume from the following content:
+
+        CONTENT:
+        ${JSON.stringify(content, null, 2)}
+
+        Please provide a complete LaTeX document that includes:
+        - Proper LaTeX document structure
+        - Professional formatting
+        - Clean sections for summary, experience, skills
+        - ATS-friendly layout
+        - Use appropriate LaTeX packages for formatting
+
+        Return only the LaTeX code without any markdown formatting or explanations.
+      `;
+
+      const response = await this.openai.chat.completions.create({
+        model: this.model,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: this.maxTokens,
+        temperature: 0.3
+      });
+
+      return response.choices[0].message.content;
+    } catch (error) {
+      console.error('LaTeX resume generation failed:', error);
+      throw new Error('Failed to generate LaTeX resume');
+    }
+  }
+
+REPLACE with:
+
+  // Generate LaTeX formatted resume using Gemini API LLM.cpp
+  async generateLaTeXResume(content) {
+    if (!this.checkAvailability()) {
+      // ... fallback code remains the same ...
+    }
+
+    try {
+      // Use Gemini API LLM.cpp for LaTeX generation
+      const prompt = `
+        Generate a professional LaTeX formatted resume from the following content:
+
+        CONTENT:
+        ${JSON.stringify(content, null, 2)}
+
+        Please provide a complete LaTeX document that includes:
+        - Proper LaTeX document structure
+        - Professional formatting
+        - Clean sections for summary, experience, skills
+        - ATS-friendly layout
+        - Use appropriate LaTeX packages for formatting
+
+        Return only the LaTeX code without any markdown formatting or explanations.
+      `;
+
+      const latexCode = await this.callGeminiAPI(prompt);
+      return latexCode;
+    } catch (error) {
+      console.error('LaTeX resume generation failed:', error);
+      throw new Error('Failed to generate LaTeX resume');
+    }
+  }
+
+ALSO UPDATE the comment at the top of the method from:
+  // Generate LaTeX formatted resume
+
+to:
+  // Generate LaTeX formatted resume using Gemini API LLM.cpp
+
+This change ensures that LaTeX resume generation uses the Gemini API LLM.cpp instead of OpenAI, providing specialized LaTeX formatting capabilities.
