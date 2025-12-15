@@ -609,7 +609,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
                     </div>
                     <Button
                       variant="professional"
-                      className="w-full bg-green-600 hover:bg-green-700"
+                      className="w-full"
                       onClick={() => onNavigate("ai-interview")}
                     >
                       Start AI Interview
@@ -633,7 +633,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
                     </div>
                     <Button
                       variant="professional"
-                      className="w-full bg-red-600 hover:bg-red-700"
+                      className="w-full"
                       onClick={() =>
                         (window.location.href = "/managerial-interview")
                       }
@@ -659,7 +659,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
                     </div>
                     <Button
                       variant="professional"
-                      className="w-full bg-yellow-600 hover:bg-yellow-700"
+                      className="w-full"
                       onClick={() => (window.location.href = "/hr-interview")}
                     >
                       Start HR Interview
@@ -683,7 +683,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
                     </div>
                     <Button
                       variant="professional"
-                      className="w-full bg-indigo-600 hover:bg-indigo-700"
+                      className="w-full"
                       onClick={() =>
                         (window.location.href = "/technical-interview")
                       }
@@ -708,7 +708,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
                     </div>
                     <Button
                       variant="professional"
-                      className="w-full bg-cyan-600 hover:bg-cyan-700"
+                      className="w-full"
                       onClick={() => onNavigate("resume-pdf")}
                     >
                       Access Resume PDF Generator
@@ -731,14 +731,6 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
                 >
                   <Calendar className="h-6 w-6" />
                   <span>Schedule Practice</span>
-                </Button>
-                <Button
-                  variant="professional"
-                  className="h-auto p-6 flex-col gap-3"
-                  onClick={() => onNavigate("interview")}
-                >
-                  <Play className="h-6 w-6" />
-                  <span>Quick Interview</span>
                 </Button>
                 <Button
                   variant="professional"
