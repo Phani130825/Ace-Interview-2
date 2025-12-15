@@ -8,8 +8,8 @@ import ResumeTailoring from "@/components/ResumeTailoring";
 import Aptitude from "@/components/Aptitude";
 import CodingRound from "@/components/CodingRound";
 import InterviewSimulation from "@/components/InterviewSimulation";
-import AIInterviewSimulator from "@/components/AIInterviewSimulator";
 import PerformanceAnalytics from "@/components/PerformanceAnalytics";
+import PerformanceReport from "@/components/PerformanceReport";
 import SchedulePractice from "@/components/SchedulePractice";
 import Settings from "@/components/Settings";
 import Login from "@/components/Login";
@@ -28,14 +28,14 @@ type AppView =
   | "aptitude"
   | "coding"
   | "interview"
-  | "ai-interview"
   | "analytics"
   | "schedule"
   | "settings"
   | "login"
   | "register"
   | "pipelines"
-  | "resume-pdf";
+  | "resume-pdf"
+  | "performance";
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<AppView>("landing");
@@ -184,14 +184,14 @@ const Index = () => {
           />
         );
       }
-      case "ai-interview":
-        return <AIInterviewSimulator />;
       case "schedule":
         return <SchedulePractice onStart={() => setCurrentView("interview")} />;
       case "settings":
         return <Settings />;
       case "analytics":
         return <PerformanceAnalytics />;
+      case "performance":
+        return <PerformanceReport />;
       case "pipelines":
         return <PipelineDashboard />;
       default:

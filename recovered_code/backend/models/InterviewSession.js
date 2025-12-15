@@ -31,6 +31,6 @@ const InterviewSessionSchema = new mongoose.Schema({
   }
 });
 
-const InterviewSession = mongoose.model('InterviewSession', InterviewSessionSchema);
+const InterviewRecord = mongoose.models.InterviewRecord || mongoose.model('InterviewRecord', InterviewSessionSchema);
 
-export default InterviewSession;
+export default InterviewRecord;

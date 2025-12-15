@@ -6,9 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Mic, MicOff, Send, RotateCcw, Loader2 } from "lucide-react";
+import { Mic, MicOff, Send, RotateCcw, Loader2, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import axios from "axios";
+import {
+  saveInterviewSession,
+  updateInterviewSession,
+} from "@/services/testStorage";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
@@ -27,7 +31,13 @@ type LogEntry = {
 
 type InterviewState = "setup" | "in-progress" | "feedback";
 
-const TechnicalInterviewSimulator = () => {
+interface TechnicalInterviewSimulatorProps {
+  onNavigate?: (view: string) => void;
+}
+
+const TechnicalInterviewSimulator = ({
+  onNavigate,
+}: TechnicalInterviewSimulatorProps = {}) => {
   // State Management
   const [jobDetails, setJobDetails] = useState({
     role: "",
@@ -43,6 +53,9 @@ const TechnicalInterviewSimulator = () => {
   const [isListening, setIsListening] = useState(false);
   const [chatHistory, setChatHistory] = useState<any[]>([]);
   const [questionCount, setQuestionCount] = useState(0);
+  const [currentSessionId, setCurrentSessionId] = useState<string>("");
+  const [interviewStartTime, setInterviewStartTime] = useState<number>(0);
+  const [showBackConfirm, setShowBackConfirm] = useState<boolean>(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const speechRecognitionRef = useRef<any>(null);
@@ -118,6 +131,30 @@ const TechnicalInterviewSimulator = () => {
       chatEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [interviewLog]);
+
+  // Update interview session storage whenever log changes
+  useEffect(() => {
+    if (currentSessionId && interviewLog.length > 0) {
+      const duration =
+        interviewStartTime > 0
+          ? Math.floor((Date.now() - interviewStartTime) / 1000)
+          : 0;
+      const feedbackEntry = interviewLog.find(
+        (entry) => entry.speaker === "Feedback"
+      );
+
+      updateInterviewSession(currentSessionId, {
+        chatLog: interviewLog.map((entry) => ({
+          speaker: entry.speaker,
+          text: entry.text,
+          timestamp: entry.timestamp,
+        })),
+        duration,
+        feedback: feedbackEntry?.text,
+        status: interviewState === "feedback" ? "completed" : "in-progress",
+      });
+    }
+  }, [interviewLog, currentSessionId, interviewState, interviewStartTime]);
 
   // Note: Using direct Gemini API calls, no backend polling needed
 
@@ -238,6 +275,27 @@ Start naturally with your introduction and first question.`;
         { role: "model", parts: [{ text: text }] },
       ]);
       setQuestionCount(1);
+      setInterviewStartTime(Date.now());
+
+      // Save interview session to storage
+      saveInterviewSession({
+        interviewType: "technical",
+        interviewerName: "Dr. Sarah Chen",
+        jobRole: jobDetails.role,
+        company: jobDetails.company,
+        chatLog: initialLog.map((entry) => ({
+          speaker: entry.speaker,
+          text: entry.text,
+          timestamp: entry.timestamp,
+        })),
+        status: "in-progress",
+      })
+        .then((newSessionId) => {
+          setCurrentSessionId(newSessionId);
+        })
+        .catch((error) => {
+          console.error("Error saving interview session:", error);
+        });
 
       // Speak the greeting using TTS
       speakText(text);
@@ -337,6 +395,13 @@ As Dr. Sarah Chen, acknowledge their thanks professionally and provide feedback 
         }
       } catch (error) {
         console.error("Error generating early feedback:", error);
+      }
+
+      // Mark session as early-exit
+      if (currentSessionId) {
+        updateInterviewSession(currentSessionId, {
+          status: "early-exit",
+        });
       }
 
       setInterviewState("feedback");
@@ -568,6 +633,37 @@ Ask one focused question that builds on the conversation and assesses technical 
     setQuestionCount(0);
   };
 
+  const handleBackClick = () => {
+    setShowBackConfirm(true);
+  };
+
+  const confirmBack = () => {
+    // Save current session if in progress
+    if (interviewState === "in-progress" && currentSessionId) {
+      const duration = Math.floor((Date.now() - interviewStartTime) / 1000);
+      updateInterviewSession(currentSessionId, {
+        chatLog: interviewLog.map((log) => ({
+          speaker: log.speaker,
+          text: log.text,
+          timestamp: log.timestamp,
+        })),
+        duration,
+        status: "early-exit",
+      }).catch((error) =>
+        console.error("Error saving interview session:", error)
+      );
+    }
+    if (onNavigate) {
+      onNavigate("dashboard");
+    } else {
+      window.location.href = "/";
+    }
+  };
+
+  const cancelBack = () => {
+    setShowBackConfirm(false);
+  };
+
   const getSpeakerColor = (speaker: string) => {
     switch (speaker) {
       case "You":
@@ -590,6 +686,12 @@ Ask one focused question that builds on the conversation and assesses technical 
   const renderSetup = () => (
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
+        <div className="flex items-center justify-between mb-4">
+          <Button onClick={handleBackClick} variant="outline" className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Button>
+        </div>
         <CardTitle className="text-2xl font-bold text-center">
           Technical Interview Setup
         </CardTitle>
@@ -658,13 +760,24 @@ Ask one focused question that builds on the conversation and assesses technical 
   const renderInProgress = () => (
     <Card className="w-full max-w-4xl mx-auto h-[80vh] flex flex-col">
       <CardHeader className="border-b">
+        <div className="flex items-center justify-between mb-2">
+          <Button
+            onClick={handleBackClick}
+            variant="outline"
+            size="sm"
+            className="gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+          <Badge variant="secondary" className="text-sm">
+            {interviewType}
+          </Badge>
+        </div>
         <div className="flex items-center justify-between">
           <CardTitle className="text-xl font-bold">
             Technical Interview Simulator
           </CardTitle>
-          <Badge variant="secondary" className="text-sm">
-            {interviewType}
-          </Badge>
         </div>
       </CardHeader>
 
@@ -748,6 +861,12 @@ Ask one focused question that builds on the conversation and assesses technical 
   const renderFeedback = () => (
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
+        <div className="flex items-center justify-between mb-4">
+          <Button onClick={handleBackClick} variant="outline" className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Button>
+        </div>
         <CardTitle className="text-2xl font-bold text-center">
           Technical Interview Complete!
         </CardTitle>
@@ -788,6 +907,30 @@ Ask one focused question that builds on the conversation and assesses technical 
         {interviewState === "setup" && renderSetup()}
         {interviewState === "in-progress" && renderInProgress()}
         {interviewState === "feedback" && renderFeedback()}
+
+        {/* Back Confirmation Modal */}
+        {showBackConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <Card className="w-full max-w-md">
+              <CardHeader>
+                <CardTitle>Confirm Navigation</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-muted-foreground">
+                  {interviewState === "in-progress"
+                    ? "Are you sure you want to go back? Your current interview progress will be saved, but you'll need to restart the interview from the beginning."
+                    : "Are you sure you want to go back to the dashboard?"}
+                </p>
+                <div className="flex gap-4 justify-end">
+                  <Button onClick={cancelBack} variant="outline">
+                    Cancel
+                  </Button>
+                  <Button onClick={confirmBack}>Go Back</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );

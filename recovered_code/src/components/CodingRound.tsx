@@ -12,9 +12,11 @@ import {
   Trophy,
   ArrowRight,
   Loader,
+  ArrowLeft,
 } from "lucide-react";
 import api from "@/services/api";
 import axios from "axios";
+import { saveCodingTest } from "@/services/testStorage";
 
 // Type declarations for Monaco Editor
 declare global {
@@ -72,6 +74,7 @@ const App = ({ onProceed }: CodingRoundProps) => {
   const [finalScore, setFinalScore] = useState(null);
   const [apiError, setApiError] = useState(null);
   const [modalMessage, setModalMessage] = useState(null);
+  const [showBackConfirm, setShowBackConfirm] = useState(false);
   const [isEditorReady, setIsEditorReady] = useState(false);
   const monacoEditorRef = useRef(null);
   const lastGenerationTime = useRef(0);
@@ -661,6 +664,23 @@ Make the boilerplate similarly complete for all other languages.`;
     setModalMessage(null);
   };
 
+  const handleBackClick = () => {
+    setShowBackConfirm(true);
+  };
+
+  const confirmBack = () => {
+    // Save current progress if there's a question and code
+    if (question && code && userId) {
+      saveCode(question.title, language, code);
+    }
+    // Navigate back to dashboard
+    window.location.href = "/";
+  };
+
+  const cancelBack = () => {
+    setShowBackConfirm(false);
+  };
+
   const submitToBackend = async (isSubmit) => {
     if (!question || isLoading) return;
 
@@ -784,32 +804,51 @@ Make the boilerplate similarly complete for all other languages.`;
 
       setTestResults(allResults);
 
-      if (isSubmit && BACKEND_URL && userId) {
+      if (isSubmit) {
         const passedSubmissions = allResults.filter(
           (res) => res.status_id === 3
         );
         const score = (passedSubmissions.length / allResults.length) * 100;
         setFinalScore(score);
 
-        const submissionData = {
-          userId: userId,
+        // Save to local storage
+        saveCodingTest({
           questionTitle: question.title,
+          questionDescription: question.description,
           language: languageMap[language].name,
-          score: score,
-          passedCount: passedSubmissions.length,
           totalTestCases: allResults.length,
-          submittedAt: new Date(),
-          results: JSON.stringify(allResults),
-        };
+          passedTestCases: passedSubmissions.length,
+          score: passedSubmissions.length,
+          percentage: score,
+          submissionStatus:
+            score === 100
+              ? "completed"
+              : score > 0
+              ? "partial"
+              : "not_attempted",
+        });
 
-        try {
-          await api.post("/submissions", submissionData);
-          // Refresh submission history
-          const historyResponse = await api.get(`/submissions/${userId}`);
-          setSubmissionHistory(historyResponse.data);
-        } catch (e) {
-          console.error("Error saving submission to backend:", e);
-          setApiError("Failed to save submission to backend.");
+        if (BACKEND_URL && userId) {
+          const submissionData = {
+            userId: userId,
+            questionTitle: question.title,
+            language: languageMap[language].name,
+            score: score,
+            passedCount: passedSubmissions.length,
+            totalTestCases: allResults.length,
+            submittedAt: new Date(),
+            results: JSON.stringify(allResults),
+          };
+
+          try {
+            await api.post("/submissions", submissionData);
+            // Refresh submission history
+            const historyResponse = await api.get(`/submissions/${userId}`);
+            setSubmissionHistory(historyResponse.data);
+          } catch (e) {
+            console.error("Error saving submission to backend:", e);
+            setApiError("Failed to save submission to backend.");
+          }
         }
       }
       setIsLoading(false);
@@ -890,11 +929,48 @@ Make the boilerplate similarly complete for all other languages.`;
         </div>
       )}
 
+      {showBackConfirm && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3 className="text-xl font-bold text-gray-200 mb-4">
+              Confirm Navigation
+            </h3>
+            <p className="text-gray-300 mb-6">
+              Are you sure you want to go back? Your current code will be saved,
+              but any unsaved test results will be lost.
+            </p>
+            <div className="flex gap-4 justify-center">
+              <button
+                onClick={cancelBack}
+                className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-md transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBack}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-md transition-colors"
+              >
+                Go Back
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto">
         <header className="flex flex-col sm:flex-row justify-between items-center mb-6">
-          <h1 className="text-4xl font-extrabold text-blue-400">
-            AI Code Challenge
-          </h1>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleBackClick}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Dashboard
+            </button>
+            <h1 className="text-4xl font-extrabold text-blue-400">
+              AI Code Challenge
+            </h1>
+          </div>
           <div className="flex items-center space-x-2 mt-4 sm:mt-0">
             <span className="text-gray-400">User ID:</span>
             <span className="bg-gray-800 text-blue-300 font-mono px-2 py-1 rounded-md text-sm truncate">

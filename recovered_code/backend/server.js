@@ -22,6 +22,8 @@ import aptitudeRoutes from './routes/aptitude.js';
 import codingRoutes from './routes/coding.js';
 
 import submissionsRoutes from './routes/submissions.js';
+import aptitudeTestsRoutes from './routes/aptitudeTests.js';
+import interviewSessionsRoutes from './routes/interviewSessions.js';
 
 // Import middleware
 import { authenticateToken } from './middleware/auth.js';
@@ -91,6 +93,8 @@ app.use('/api/aptitude', authenticateToken, aptitudeRoutes);
 app.use('/api/coding', authenticateToken, codingRoutes);
 
 app.use('/api/submissions', authenticateToken, submissionsRoutes);
+app.use('/api/aptitude-tests', authenticateToken, aptitudeTestsRoutes);
+app.use('/api/interview-sessions', authenticateToken, interviewSessionsRoutes);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {

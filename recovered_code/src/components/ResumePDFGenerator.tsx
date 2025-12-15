@@ -3,7 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader, Download, Sparkles, FileText, Eye } from "lucide-react";
+import {
+  Loader,
+  Download,
+  Sparkles,
+  FileText,
+  Eye,
+  ArrowLeft,
+} from "lucide-react";
 import pdfMake from "pdfmake/build/pdfmake";
 import pdfFonts from "pdfmake/build/vfs_fonts";
 
@@ -51,7 +58,11 @@ interface ResumeData {
   }>;
 }
 
-const ResumePDFGenerator = () => {
+interface ResumePDFGeneratorProps {
+  onNavigate?: (view: string) => void;
+}
+
+const ResumePDFGenerator = ({ onNavigate }: ResumePDFGeneratorProps = {}) => {
   const [resumeText, setResumeText] = useState<string>("");
   const [jobDescription, setJobDescription] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -60,6 +71,7 @@ const ResumePDFGenerator = () => {
   const [optimizedData, setOptimizedData] = useState<ResumeData | null>(null);
   const [message, setMessage] = useState<string>("");
   const [isError, setIsError] = useState<boolean>(false);
+  const [showBackConfirm, setShowBackConfirm] = useState<boolean>(false);
 
   const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
@@ -115,6 +127,22 @@ const ResumePDFGenerator = () => {
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
+  };
+
+  const handleBackClick = () => {
+    setShowBackConfirm(true);
+  };
+
+  const confirmBack = () => {
+    if (onNavigate) {
+      onNavigate("dashboard");
+    } else {
+      window.location.href = "/";
+    }
+  };
+
+  const cancelBack = () => {
+    setShowBackConfirm(false);
   };
 
   const extractResumeData = async () => {
@@ -574,13 +602,20 @@ Return the optimized resume data in the SAME JSON structure as the input. Only m
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30 p-6">
       <div className="max-w-6xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            AI Resume PDF Generator
-          </h1>
-          <p className="text-gray-600">
-            Extract, optimize, and generate professional PDF resumes using AI
-          </p>
+        <div className="flex items-center justify-between mb-8">
+          <Button onClick={handleBackClick} variant="outline" className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Button>
+          <div className="flex-1 text-center">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              AI Resume PDF Generator
+            </h1>
+            <p className="text-gray-600">
+              Extract, optimize, and generate professional PDF resumes using AI
+            </p>
+          </div>
+          <div className="w-40"></div>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-8">
@@ -951,6 +986,29 @@ Return the optimized resume data in the SAME JSON structure as the input. Only m
             </Card>
           </div>
         </div>
+
+        {/* Back Confirmation Modal */}
+        {showBackConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <Card className="w-full max-w-md">
+              <CardHeader>
+                <CardTitle>Confirm Navigation</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-gray-600">
+                  Are you sure you want to go back to the dashboard? Any unsaved
+                  progress will be lost.
+                </p>
+                <div className="flex gap-4 justify-end">
+                  <Button onClick={cancelBack} variant="outline">
+                    Cancel
+                  </Button>
+                  <Button onClick={confirmBack}>Go Back</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );

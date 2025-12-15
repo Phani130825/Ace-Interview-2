@@ -2,7 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import Interview from '../models/Interview.js';
 import Resume from '../models/Resume.js';
-import InterviewSession from '../models/InterviewSession.js';
+import InterviewRecord from '../models/InterviewSession.js';
 import aiService from '../services/aiService.js';
 import Pipeline from '../models/Pipeline.js';
 import { requirePremium } from '../middleware/auth.js';
@@ -606,7 +606,7 @@ router.post('/:id/submit', asyncHandler(async (req, res) => {
   }
 
   try {
-    const session = new InterviewSession({
+    const session = new InterviewRecord({
       interviewId: req.params.id,
       transcript,
       score,

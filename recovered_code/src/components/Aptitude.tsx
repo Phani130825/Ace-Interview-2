@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { saveAptitudeTest } from "@/services/testStorage";
 
 /* ============================
    ENV CONFIG
@@ -59,6 +60,8 @@ const Aptitude = ({ onProceed }: AptitudeProps) => {
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [score, setScore] = useState<number>(0);
+  const [startTime, setStartTime] = useState<number>(0);
+  const [showBackConfirm, setShowBackConfirm] = useState<boolean>(false);
 
   /* ============================
      FETCH QUESTIONS
@@ -175,6 +178,7 @@ Rules:
 
       setQuestions(fetchedQuestions);
       setStage("questions");
+      setStartTime(Date.now()); // Start timer when questions are displayed
     } catch (error) {
       console.error("Gemini failed:", error);
       setErrorMessage("Failed to fetch questions. Please try again.");
@@ -190,12 +194,38 @@ Rules:
   };
 
   const handleSubmit = () => {
+    const timeTaken =
+      startTime > 0 ? Math.floor((Date.now() - startTime) / 1000) : 0;
     let calculatedScore = 0;
-    questions.forEach((q, idx) => {
-      if (answers[idx] === q.correctAnswer) {
-        calculatedScore++;
-      }
+
+    // Build detailed question results
+    const questionResults = questions.map((q, idx) => {
+      const userAnswer = answers[idx] || "";
+      const isCorrect = userAnswer === q.correctAnswer;
+      if (isCorrect) calculatedScore++;
+
+      return {
+        question: q.question,
+        options: q.options,
+        correctAnswer: q.correctAnswer,
+        userAnswer,
+        isCorrect,
+      };
     });
+
+    const percentage = (calculatedScore / questions.length) * 100;
+
+    // Save to MongoDB and local storage
+    saveAptitudeTest({
+      questions: questionResults,
+      score: calculatedScore,
+      totalQuestions: questions.length,
+      percentage,
+      timeTaken,
+    }).catch((error) => {
+      console.error("Error saving aptitude test:", error);
+    });
+
     setScore(calculatedScore);
     setStage("results");
 
@@ -210,12 +240,34 @@ Rules:
     setStage("initial");
   };
 
+  const handleBackClick = () => {
+    setShowBackConfirm(true);
+  };
+
+  const confirmBack = () => {
+    // Navigate back to dashboard
+    window.location.href = "/";
+  };
+
+  const cancelBack = () => {
+    setShowBackConfirm(false);
+  };
+
   /* ============================
      UI
   ============================ */
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
       <div className="w-full max-w-4xl bg-white rounded-xl shadow-lg p-8">
+        <div className="flex items-center justify-between mb-4">
+          <button
+            onClick={handleBackClick}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+          >
+            ← Back to Dashboard
+          </button>
+          <div className="w-32"></div>
+        </div>
         <header className="text-center mb-8">
           <h1 className="text-4xl font-bold text-teal-700">
             General Aptitude Test
@@ -367,6 +419,36 @@ Rules:
             >
               Try Again
             </button>
+          </div>
+        )}
+
+        {/* Back Confirmation Modal */}
+        {showBackConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-8 max-w-md shadow-2xl">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">
+                Confirm Navigation
+              </h3>
+              <p className="text-gray-600 mb-6">
+                {stage === "questions"
+                  ? "Are you sure you want to go back? Your progress will be lost and the test will not be saved."
+                  : "Are you sure you want to go back to the dashboard?"}
+              </p>
+              <div className="flex gap-4 justify-end">
+                <button
+                  onClick={cancelBack}
+                  className="px-6 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmBack}
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+                >
+                  Go Back
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

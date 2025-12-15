@@ -10,6 +10,7 @@ import ManagerialInterviewSimulator from "./components/ManagerialInterviewSimula
 import HRInterviewSimulator from "./components/HRInterviewSimulator";
 import TechnicalInterviewSimulator from "./components/TechnicalInterviewSimulator";
 import ResumePDFGenerator from "./components/ResumePDFGenerator";
+import PerformanceReport from "./components/PerformanceReport";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +33,7 @@ const App = () => (
               element={<TechnicalInterviewSimulator />}
             />
             <Route path="/resume-pdf" element={<ResumePDFGenerator />} />
+            <Route path="/performance" element={<PerformanceReport />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

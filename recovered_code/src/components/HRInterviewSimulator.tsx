@@ -6,9 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Mic, MicOff, Send, RotateCcw, Loader2 } from "lucide-react";
+import { Mic, MicOff, Send, RotateCcw, Loader2, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import axios from "axios";
+import {
+  saveInterviewSession,
+  updateInterviewSession,
+} from "@/services/testStorage";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
@@ -27,7 +31,13 @@ type LogEntry = {
 
 type InterviewState = "setup" | "in-progress" | "feedback";
 
-const HRInterviewSimulator = () => {
+interface HRInterviewSimulatorProps {
+  onNavigate?: (view: string) => void;
+}
+
+const HRInterviewSimulator = ({
+  onNavigate,
+}: HRInterviewSimulatorProps = {}) => {
   // State Management
   const [jobDetails, setJobDetails] = useState({
     role: "",
@@ -43,6 +53,9 @@ const HRInterviewSimulator = () => {
   const [isListening, setIsListening] = useState(false);
   const [chatHistory, setChatHistory] = useState<any[]>([]);
   const [questionCount, setQuestionCount] = useState(0);
+  const [currentSessionId, setCurrentSessionId] = useState<string>("");
+  const [interviewStartTime, setInterviewStartTime] = useState<number>(0);
+  const [showBackConfirm, setShowBackConfirm] = useState<boolean>(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const speechRecognitionRef = useRef<any>(null);
@@ -106,6 +119,21 @@ const HRInterviewSimulator = () => {
       chatEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [interviewLog]);
+
+  // Update interview session in storage whenever interview log changes
+  useEffect(() => {
+    if (currentSessionId && interviewLog.length > 0 && interviewStartTime > 0) {
+      const duration = Math.floor((Date.now() - interviewStartTime) / 1000);
+      const status =
+        interviewState === "feedback" ? "completed" : "in-progress";
+
+      updateInterviewSession(currentSessionId, {
+        chatLog: interviewLog,
+        duration,
+        status,
+      });
+    }
+  }, [interviewLog, currentSessionId, interviewStartTime, interviewState]);
 
   // Poll for session updates (alternative to Socket.IO)
   useEffect(() => {
@@ -251,6 +279,23 @@ Start with a welcoming introduction and your first question.`;
       ]);
       setQuestionCount(1);
 
+      // Save interview session to storage
+      saveInterviewSession({
+        interviewType: "hr",
+        interviewerName: "Jennifer Hayes",
+        jobRole: jobDetails.role,
+        company: jobDetails.company,
+        chatLog: initialLog,
+        status: "in-progress",
+      })
+        .then((sessionId) => {
+          setCurrentSessionId(sessionId);
+          setInterviewStartTime(Date.now());
+        })
+        .catch((error) => {
+          console.error("Error saving interview session:", error);
+        });
+
       // Speak the greeting using TTS
       speakText(text);
 
@@ -344,6 +389,19 @@ As Jennifer Hayes, acknowledge their thanks professionally and provide HR-focuse
             timestamp: Date.now(),
           };
           setInterviewLog((prev) => [...prev, feedbackLogEntry]);
+
+          // Update session with feedback
+          if (currentSessionId) {
+            const duration = Math.floor(
+              (Date.now() - interviewStartTime) / 1000
+            );
+            updateInterviewSession(currentSessionId, {
+              chatLog: [...interviewLog, userLogEntry, feedbackLogEntry],
+              duration,
+              feedback: feedbackText,
+              status: "early-exit",
+            });
+          }
         }
       } catch (error) {
         console.error("Error generating feedback:", error);
@@ -570,6 +628,37 @@ Ask one clear, empathetic question:`;
     setQuestionCount(0);
   };
 
+  const handleBackClick = () => {
+    setShowBackConfirm(true);
+  };
+
+  const confirmBack = () => {
+    // Save current session if in progress
+    if (interviewState === "in-progress" && currentSessionId) {
+      const duration = Math.floor((Date.now() - interviewStartTime) / 1000);
+      updateInterviewSession(currentSessionId, {
+        chatLog: interviewLog.map((log) => ({
+          speaker: log.speaker,
+          text: log.text,
+          timestamp: log.timestamp,
+        })),
+        duration,
+        status: "early-exit",
+      }).catch((error) =>
+        console.error("Error saving interview session:", error)
+      );
+    }
+    if (onNavigate) {
+      onNavigate("dashboard");
+    } else {
+      window.location.href = "/";
+    }
+  };
+
+  const cancelBack = () => {
+    setShowBackConfirm(false);
+  };
+
   const getSpeakerColor = (speaker: string) => {
     switch (speaker) {
       case "You":
@@ -592,6 +681,12 @@ Ask one clear, empathetic question:`;
   const renderSetup = () => (
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
+        <div className="flex items-center justify-between mb-4">
+          <Button onClick={handleBackClick} variant="outline" className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Button>
+        </div>
         <CardTitle className="text-2xl font-bold text-center">
           HR Interview Setup
         </CardTitle>
@@ -659,13 +754,24 @@ Ask one clear, empathetic question:`;
   const renderInProgress = () => (
     <Card className="w-full max-w-4xl mx-auto h-[80vh] flex flex-col">
       <CardHeader className="border-b">
+        <div className="flex items-center justify-between mb-2">
+          <Button
+            onClick={handleBackClick}
+            variant="outline"
+            size="sm"
+            className="gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+          <Badge variant="secondary" className="text-sm">
+            {interviewType}
+          </Badge>
+        </div>
         <div className="flex items-center justify-between">
           <CardTitle className="text-xl font-bold">
             HR Interview Simulator
           </CardTitle>
-          <Badge variant="secondary" className="text-sm">
-            {interviewType}
-          </Badge>
         </div>
       </CardHeader>
 
@@ -749,6 +855,12 @@ Ask one clear, empathetic question:`;
   const renderFeedback = () => (
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
+        <div className="flex items-center justify-between mb-4">
+          <Button onClick={handleBackClick} variant="outline" className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Button>
+        </div>
         <CardTitle className="text-2xl font-bold text-center">
           HR Interview Complete!
         </CardTitle>
@@ -789,6 +901,29 @@ Ask one clear, empathetic question:`;
         {interviewState === "setup" && renderSetup()}
         {interviewState === "in-progress" && renderInProgress()}
         {interviewState === "feedback" && renderFeedback()}
+        {/* Back Confirmation Modal */}
+        {showBackConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <Card className="w-full max-w-md">
+              <CardHeader>
+                <CardTitle>Confirm Navigation</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-muted-foreground">
+                  {interviewState === "in-progress"
+                    ? "Are you sure you want to go back? Your current interview progress will be saved, but you'll need to restart the interview from the beginning."
+                    : "Are you sure you want to go back to the dashboard?"}
+                </p>
+                <div className="flex gap-4 justify-end">
+                  <Button onClick={cancelBack} variant="outline">
+                    Cancel
+                  </Button>
+                  <Button onClick={confirmBack}>Go Back</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );
