@@ -48,20 +48,27 @@ api.interceptors.response.use(
           originalRequest.headers['Authorization'] = `Bearer ${token}`;
           return api(originalRequest);
         } catch (refreshError) {
-          // Refresh token invalid or expired, remove tokens and redirect to login
+          // Refresh token invalid or expired, remove tokens
           localStorage.removeItem('token');
           localStorage.removeItem('refreshToken');
-          window.location.href = '/login';
+          // Only redirect to login if not already on dashboard/home
+          if (!window.location.pathname.includes('dashboard') && window.location.pathname !== '/') {
+            window.location.href = '/login';
+          }
           return Promise.reject(refreshError);
         }
       } else {
-        // No refresh token available - this could be an old account
-        // For old accounts, we should redirect to login to get new tokens
-        console.warn('No refresh token available. This appears to be an old account that needs re-authentication.');
+        // No refresh token available - just fail silently
+        // The app can still function with localStorage data
         localStorage.removeItem('token');
-        window.location.href = '/login';
         return Promise.reject(error);
       }
+    }
+    
+    // For rate limiting errors, just reject without redirecting
+    if (error.response?.status === 429) {
+      console.warn('Rate limit exceeded. Please try again later.');
+      return Promise.reject(error);
     }
 
     return Promise.reject(error);

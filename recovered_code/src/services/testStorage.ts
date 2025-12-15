@@ -121,6 +121,11 @@ const getAptitudeTestsFromLocalStorage = (): AptitudeTestResult[] => {
 export const getAptitudeTests = async (): Promise<AptitudeTestResult[]> => {
   const userId = getUserId();
   
+  // If no userId, return localStorage data only
+  if (!userId) {
+    return getAptitudeTestsFromLocalStorage();
+  }
+  
   // Try to fetch from MongoDB first
   try {
     const response = await api.get(`/aptitude-tests/user/${userId}`);
@@ -136,8 +141,13 @@ export const getAptitudeTests = async (): Promise<AptitudeTestResult[]> => {
       }));
       return tests;
     }
-  } catch (error) {
-    console.warn('Failed to fetch from MongoDB, using localStorage:', error);
+  } catch (error: any) {
+    // Silently fall back to localStorage for auth errors
+    if (error?.response?.status === 401 || error?.response?.status === 429) {
+      // Don't log auth errors or rate limit errors
+    } else {
+      console.warn('Failed to fetch from MongoDB, using localStorage:', error);
+    }
   }
 
   // Fallback to localStorage
@@ -272,6 +282,11 @@ const getInterviewSessionsFromLocalStorage = (): InterviewSession[] => {
 export const getInterviewSessions = async (): Promise<InterviewSession[]> => {
   const userId = getUserId();
   
+  // If no userId, return localStorage data only
+  if (!userId) {
+    return getInterviewSessionsFromLocalStorage();
+  }
+  
   // Try to fetch from MongoDB first
   try {
     const response = await api.get(`/interview-sessions/user/${userId}`);
@@ -290,8 +305,13 @@ export const getInterviewSessions = async (): Promise<InterviewSession[]> => {
       }));
       return sessions;
     }
-  } catch (error) {
-    console.warn('Failed to fetch interview sessions from MongoDB:', error);
+  } catch (error: any) {
+    // Silently fall back to localStorage for auth errors
+    if (error?.response?.status === 401 || error?.response?.status === 429) {
+      // Don't log auth errors or rate limit errors
+    } else {
+      console.warn('Failed to fetch interview sessions from MongoDB:', error);
+    }
   }
 
   // Fallback to localStorage

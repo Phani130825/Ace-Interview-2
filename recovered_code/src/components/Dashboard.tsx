@@ -174,15 +174,59 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
   // Load real-time data
   useEffect(() => {
     const loadDashboardData = async () => {
-      try {
-        // Fetch performance stats
-        const stats = await getPerformanceStats();
-        setPerformanceStats(stats);
+      // Check if user is logged in
+      if (!user) {
+        console.log("No user logged in, skipping data load");
+        return;
+      }
 
-        // Fetch all sessions data for recent sessions
-        const interviews = await getInterviewSessions();
-        const aptitudeTests = await getAptitudeTests();
+      try {
+        // Fetch all data once - avoid duplicate calls
+        const [interviews, aptitudeTests] = await Promise.all([
+          getInterviewSessions().catch(() => []),
+          getAptitudeTests().catch(() => []),
+        ]);
         const codingTests = getCodingTests();
+
+        // Calculate performance stats from fetched data
+        const stats = {
+          aptitude: {
+            total: aptitudeTests.length,
+            averageScore:
+              aptitudeTests.length > 0
+                ? aptitudeTests.reduce(
+                    (sum: any, test: any) => sum + test.percentage,
+                    0
+                  ) / aptitudeTests.length
+                : 0,
+          },
+          coding: {
+            total: codingTests.length,
+            averageScore:
+              codingTests.length > 0
+                ? codingTests.reduce(
+                    (sum: any, test: any) => sum + test.percentage,
+                    0
+                  ) / codingTests.length
+                : 0,
+          },
+          interviews: {
+            total: interviews.length,
+            byType: {
+              technical: interviews.filter(
+                (s: any) => s.interviewType === "technical"
+              ).length,
+              hr: interviews.filter((s: any) => s.interviewType === "hr")
+                .length,
+              managerial: interviews.filter(
+                (s: any) => s.interviewType === "managerial"
+              ).length,
+              ai: interviews.filter((s: any) => s.interviewType === "ai")
+                .length,
+            },
+          },
+        };
+        setPerformanceStats(stats);
 
         // Combine and sort all sessions by timestamp
         const allSessions: any[] = [
@@ -243,12 +287,11 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
       }
     };
 
-    loadDashboardData();
-
-    // Refresh data every 30 seconds
-    const interval = setInterval(loadDashboardData, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    // Only load once when user is available
+    if (user) {
+      loadDashboardData();
+    }
+  }, [user?._id]); // Only trigger when userId changes (login/logout)
 
   // Helper function to format timestamp
   const formatDate = (timestamp: number): string => {
