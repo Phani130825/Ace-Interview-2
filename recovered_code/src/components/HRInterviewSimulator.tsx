@@ -175,18 +175,34 @@ const HRInterviewSimulator = () => {
 
     try {
       // Call Gemini API directly for interview setup
-      const introPrompt = `You are conducting an HR interview for the following job details and resume. Provide a friendly introduction and the first interview question focused on HR-related topics such as company culture, employee relations, diversity and inclusion, performance management, and organizational development.
+      const introPrompt = `You are Jennifer Hayes, an HR Director with 12 years of experience in talent management, organizational development, and employee relations. You are conducting an HR interview for the following position.
+
+Your interviewing style:
+- Warm, empathetic, and professional demeanor
+- Focus on behavioral questions and past experiences
+- Assess cultural fit and values alignment
+- Explore soft skills: communication, teamwork, conflict resolution
+- Ask about work style, motivations, and career aspirations
+- Listen actively and ask thoughtful follow-ups
+- Create a comfortable environment for honest discussion
 
 Job Role: ${jobDetails.role}
 Company: ${jobDetails.company}
 
-Resume:
+Candidate's Resume:
 ${jobDetails.resumeText}
 
-Your response should start with your introduction and the first question.
-Example Format:
-Hello, and welcome to this HR interview. Let's start with your first question. How do you approach building and maintaining positive workplace relationships?
-`;
+Introduce yourself as Jennifer Hayes and ask your first HR-focused question. Focus on:
+- Cultural fit and values alignment
+- Work style and team collaboration
+- Career goals and motivations
+- Past behavioral examples (STAR method)
+- Conflict resolution and communication
+- Diversity, equity, and inclusion awareness
+- Work-life balance and adaptability
+- Company culture expectations
+
+Start with a welcoming introduction and your first question.`;
 
       const initialChatHistory = [
         { role: "user", parts: [{ text: introPrompt }] },
@@ -262,6 +278,86 @@ Hello, and welcome to this HR interview. Let's start with your first question. H
   const processAnswer = async () => {
     if (userAnswer.trim() === "") return;
 
+    // Check if user wants to end interview
+    if (userAnswer.trim().toUpperCase() === "THANK YOU") {
+      setLoading(true);
+      const currentAnswer = userAnswer;
+      setUserAnswer("");
+
+      const userLogEntry: LogEntry = {
+        speaker: "You",
+        text: currentAnswer,
+        timestamp: Date.now(),
+      };
+      setInterviewLog((prev) => [...prev, userLogEntry]);
+
+      const updatedChatHistory = [
+        ...chatHistory,
+        { role: "user", parts: [{ text: currentAnswer }] },
+      ];
+
+      try {
+        const feedbackPrompt = `The candidate has concluded the interview by saying "${currentAnswer}". As Jennifer Hayes, provide warm and constructive feedback.
+
+Job Role: ${jobDetails.role}
+Company: ${jobDetails.company}
+
+Conversation:
+${updatedChatHistory
+  .map(
+    (msg) =>
+      `${msg.role === "user" ? "Candidate" : "Jennifer Hayes"}: ${
+        msg.parts[0].text
+      }`
+  )
+  .join("\n")}
+
+As Jennifer Hayes, acknowledge their thanks professionally and provide HR-focused feedback covering:
+1. Communication style and clarity
+2. Cultural fit indicators
+3. Behavioral competencies demonstrated
+4. Areas of strength in soft skills
+5. Opportunities for growth
+6. Overall impression and next steps`;
+
+        const feedbackPayload = {
+          contents: [{ role: "user", parts: [{ text: feedbackPrompt }] }],
+        };
+        const feedbackResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(feedbackPayload),
+          }
+        );
+
+        if (feedbackResponse.ok) {
+          const feedbackResult = await feedbackResponse.json();
+          const feedbackText =
+            feedbackResult?.candidates?.[0]?.content?.parts?.[0]?.text ||
+            "Thank you for your time. We appreciate your interest and wish you the best!";
+
+          const feedbackLogEntry: LogEntry = {
+            speaker: "Feedback",
+            text: feedbackText,
+            timestamp: Date.now(),
+          };
+          setInterviewLog((prev) => [...prev, feedbackLogEntry]);
+        }
+      } catch (error) {
+        console.error("Error generating feedback:", error);
+      }
+
+      setInterviewState("feedback");
+      setLoading(false);
+      toast({
+        title: "Interview Ended",
+        description: "Thank you for participating in this HR interview.",
+      });
+      return;
+    }
+
     // Stop listening before processing
     if (speechRecognitionRef.current && isListening) {
       speechRecognitionRef.current.stop();
@@ -292,29 +388,32 @@ Hello, and welcome to this HR interview. Let's start with your first question. H
 
       if (newQuestionCount >= 5) {
         // Generate final feedback
-        const feedbackPrompt = `Based on the following HR interview conversation, provide comprehensive feedback on the candidate's performance. Include strengths, areas for improvement, and overall assessment focused on HR competencies.
+        const feedbackPrompt = `As Jennifer Hayes, provide comprehensive HR-focused feedback on the candidate's complete interview performance.
 
 Interview Type: HR
 Job Role: ${jobDetails.role}
 Company: ${jobDetails.company}
 
-Conversation:
+Complete Interview Conversation:
 ${updatedChatHistory
   .map(
     (msg, index) =>
-      `${msg.role === "user" ? "Candidate" : "Interviewer"}: ${
+      `${msg.role === "user" ? "Candidate" : "Jennifer Hayes"}: ${
         msg.parts[0].text
       }`
   )
   .join("\n")}
 
-Please provide detailed feedback covering:
-1. Understanding of HR principles and practices
-2. Communication and interpersonal skills
-3. Problem-solving in HR contexts
-4. Knowledge of employment laws and policies
-5. Overall fit for the HR role
-6. Specific recommendations for improvement`;
+Provide detailed feedback as Jennifer Hayes covering:
+1. Cultural fit and values alignment
+2. Communication and interpersonal effectiveness
+3. Behavioral competencies demonstrated (STAR examples)
+4. Understanding of HR principles and practices
+5. Emotional intelligence and empathy
+6. Conflict resolution and problem-solving in people contexts
+7. Key strengths and positive indicators
+8. Development areas with specific, actionable advice
+9. Overall recommendation for the HR role`;
 
         const feedbackPayload = {
           contents: [{ role: "user", parts: [{ text: feedbackPrompt }] }],
@@ -351,13 +450,19 @@ Please provide detailed feedback covering:
         });
       } else {
         // Generate next question
-        const nextQuestionPrompt = `Continue this HR interview for the ${
+        const nextQuestionPrompt = `You are Jennifer Hayes continuing this HR interview for the ${
           jobDetails.role
-        } position at ${
-          jobDetails.company
-        }. Based on the candidate's resume and previous answers, ask the next relevant question focused on HR topics such as company culture, employee relations, diversity and inclusion, performance management, and organizational development.
+        } position at ${jobDetails.company}.
 
-Resume:
+Your HR interviewing approach:
+- Use behavioral questions (tell me about a time when...)
+- Assess cultural fit and values alignment
+- Explore soft skills through real examples
+- Create a warm, open environment
+- Follow up on interesting points from their answer
+- Evaluate people-focused competencies
+
+Candidate's Resume:
 ${jobDetails.resumeText}
 
 Previous conversation:
@@ -365,7 +470,7 @@ ${updatedChatHistory
   .slice(0, -1)
   .map(
     (msg, index) =>
-      `${msg.role === "user" ? "Candidate" : "Interviewer"}: ${
+      `${msg.role === "user" ? "Candidate" : "Jennifer Hayes"}: ${
         msg.parts[0].text
       }`
   )
@@ -373,7 +478,15 @@ ${updatedChatHistory
 
 Candidate's last answer: ${currentAnswer}
 
-Ask one focused question that builds on the conversation and assesses HR knowledge and skills.`;
+Based on their response, ask your next HR-focused question covering:
+- Workplace relationships and teamwork
+- Conflict resolution and communication
+- Diversity, equity, and inclusion
+- Adaptability and growth mindset
+- Work-life balance and well-being
+- Career aspirations and motivations
+
+Ask one clear, empathetic question:`;
 
         const questionPayload = {
           contents: [{ role: "user", parts: [{ text: nextQuestionPrompt }] }],

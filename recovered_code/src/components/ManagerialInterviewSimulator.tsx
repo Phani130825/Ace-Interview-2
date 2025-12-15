@@ -175,18 +175,37 @@ const ManagerialInterviewSimulator = () => {
 
     try {
       // Call Gemini API directly for interview setup
-      const introPrompt = `You are conducting a Managerial interview for the following job details and resume. Provide a friendly introduction and the first interview question focused on managerial competencies such as leadership, strategy, team management, decision-making, and business acumen.
+      const introPrompt = `You are Robert Martinez, a Chief Operating Officer with 18 years of leadership experience across Fortune 500 companies. You are conducting a managerial interview for the following position.
+
+Your interviewing style:
+- Professional and strategic in your approach
+- Focus on leadership philosophy and management style
+- Ask scenario-based questions about decision-making
+- Assess strategic thinking and business acumen
+- Explore conflict management and team dynamics
+- Evaluate change management capabilities
+- Inquire about metrics, KPIs, and results orientation
+- Test understanding of organizational dynamics
 
 Job Role: ${jobDetails.role}
 Company: ${jobDetails.company}
 
-Resume:
+Candidate's Resume:
 ${jobDetails.resumeText}
 
-Your response should start with your introduction and the first question.
-Example Format:
-Hello, and welcome to this managerial interview. Let's start with your first question. Can you describe a time when you had to lead a team through a significant change?
-`;
+Introduce yourself as Robert Martinez and ask your first managerial question. Focus on:
+- Leadership style and philosophy
+- Strategic planning and execution
+- Team building and talent development
+- Decision-making under pressure
+- Change management and adaptability
+- Stakeholder management
+- Budget and resource allocation
+- Performance metrics and accountability
+- Conflict resolution at scale
+- Business acumen and market awareness
+
+Start with a professional introduction and your first strategic question.`;
 
       const initialChatHistory = [
         { role: "user", parts: [{ text: introPrompt }] },
@@ -262,6 +281,89 @@ Hello, and welcome to this managerial interview. Let's start with your first que
   const processAnswer = async () => {
     if (userAnswer.trim() === "") return;
 
+    // Check if user wants to end interview
+    if (userAnswer.trim().toUpperCase() === "THANK YOU") {
+      setLoading(true);
+      const currentAnswer = userAnswer;
+      setUserAnswer("");
+
+      const userLogEntry: LogEntry = {
+        speaker: "You",
+        text: currentAnswer,
+        timestamp: Date.now(),
+      };
+      setInterviewLog((prev) => [...prev, userLogEntry]);
+
+      const updatedChatHistory = [
+        ...chatHistory,
+        { role: "user", parts: [{ text: currentAnswer }] },
+      ];
+
+      try {
+        const feedbackPrompt = `The candidate has concluded the interview by saying "${currentAnswer}". As Robert Martinez, provide professional executive-level feedback.
+
+Job Role: ${jobDetails.role}
+Company: ${jobDetails.company}
+
+Conversation:
+${updatedChatHistory
+  .map(
+    (msg) =>
+      `${msg.role === "user" ? "Candidate" : "Robert Martinez"}: ${
+        msg.parts[0].text
+      }`
+  )
+  .join("\n")}
+
+As Robert Martinez, acknowledge professionally and provide strategic feedback covering:
+1. Leadership potential and management readiness
+2. Strategic thinking demonstrated
+3. Decision-making approach
+4. Communication at executive level
+5. Business acumen indicators
+6. Areas of strength
+7. Development opportunities
+8. Overall assessment for the role`;
+
+        const feedbackPayload = {
+          contents: [{ role: "user", parts: [{ text: feedbackPrompt }] }],
+        };
+        const feedbackResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(feedbackPayload),
+          }
+        );
+
+        if (feedbackResponse.ok) {
+          const feedbackResult = await feedbackResponse.json();
+          const feedbackText =
+            feedbackResult?.candidates?.[0]?.content?.parts?.[0]?.text ||
+            "Thank you for your time. We'll be in touch regarding next steps.";
+
+          const feedbackLogEntry: LogEntry = {
+            speaker: "Feedback",
+            text: feedbackText,
+            timestamp: Date.now(),
+          };
+          setInterviewLog((prev) => [...prev, feedbackLogEntry]);
+        }
+      } catch (error) {
+        console.error("Error generating feedback:", error);
+      }
+
+      setInterviewState("feedback");
+      setLoading(false);
+      toast({
+        title: "Interview Ended",
+        description:
+          "Thank you for participating in this managerial interview.",
+      });
+      return;
+    }
+
     // Stop listening before processing
     if (speechRecognitionRef.current && isListening) {
       speechRecognitionRef.current.stop();
@@ -292,29 +394,34 @@ Hello, and welcome to this managerial interview. Let's start with your first que
 
       if (newQuestionCount >= 5) {
         // Generate final feedback
-        const feedbackPrompt = `Based on the following managerial interview conversation, provide comprehensive feedback on the candidate's performance. Include strengths, areas for improvement, and overall assessment focused on managerial competencies.
+        const feedbackPrompt = `As Robert Martinez, provide comprehensive executive-level feedback on the candidate's managerial interview performance.
 
 Interview Type: Managerial
 Job Role: ${jobDetails.role}
 Company: ${jobDetails.company}
 
-Conversation:
+Complete Interview Conversation:
 ${updatedChatHistory
   .map(
     (msg, index) =>
-      `${msg.role === "user" ? "Candidate" : "Interviewer"}: ${
+      `${msg.role === "user" ? "Candidate" : "Robert Martinez"}: ${
         msg.parts[0].text
       }`
   )
   .join("\n")}
 
-Please provide detailed feedback covering:
-1. Leadership and team management skills
-2. Strategic thinking and decision-making
-3. Communication and interpersonal skills
-4. Business acumen and problem-solving
-5. Overall fit for the managerial role
-6. Specific recommendations for improvement`;
+Provide detailed feedback as Robert Martinez covering:
+1. Leadership potential and management capability
+2. Strategic thinking and vision
+3. Decision-making under complexity and pressure
+4. Business acumen and financial understanding
+5. Team development and talent management approach
+6. Change management and adaptability
+7. Executive communication effectiveness
+8. Stakeholder management capabilities
+9. Key strengths and leadership qualities
+10. Development areas with executive-level guidance
+11. Overall assessment for the managerial/leadership role`;
 
         const feedbackPayload = {
           contents: [{ role: "user", parts: [{ text: feedbackPrompt }] }],
@@ -351,13 +458,20 @@ Please provide detailed feedback covering:
         });
       } else {
         // Generate next question
-        const nextQuestionPrompt = `Continue this Managerial interview for the ${
+        const nextQuestionPrompt = `You are Robert Martinez continuing this managerial interview for the ${
           jobDetails.role
-        } position at ${
-          jobDetails.company
-        }. Based on the candidate's resume and previous answers, ask the next relevant question focused on managerial competencies such as leadership, strategy, team management, decision-making, and business acumen.
+        } position at ${jobDetails.company}.
 
-Resume:
+Your executive interviewing approach:
+- Ask strategic, scenario-based questions
+- Assess leadership philosophy and management style
+- Evaluate decision-making in complex situations
+- Test understanding of P&L, metrics, and business drivers
+- Explore change management experience
+- Assess ability to balance competing priorities
+- Evaluate stakeholder management at all levels
+
+Candidate's Resume:
 ${jobDetails.resumeText}
 
 Previous conversation:
@@ -365,7 +479,7 @@ ${updatedChatHistory
   .slice(0, -1)
   .map(
     (msg, index) =>
-      `${msg.role === "user" ? "Candidate" : "Interviewer"}: ${
+      `${msg.role === "user" ? "Candidate" : "Robert Martinez"}: ${
         msg.parts[0].text
       }`
   )
@@ -373,7 +487,16 @@ ${updatedChatHistory
 
 Candidate's last answer: ${currentAnswer}
 
-Ask one focused question that builds on the conversation and assesses managerial skills.`;
+Based on their response, ask your next managerial question focusing on:
+- Strategic leadership and vision
+- Team scaling and organizational design
+- Performance management and accountability
+- Budget and resource optimization
+- Crisis management and difficult decisions
+- Cross-functional collaboration
+- Innovation and continuous improvement
+
+Ask one clear, strategic question:`;
 
         const questionPayload = {
           contents: [{ role: "user", parts: [{ text: nextQuestionPrompt }] }],

@@ -53,7 +53,8 @@ const TechnicalInterviewSimulator = () => {
     if (!GEMINI_API_KEY) {
       toast({
         title: "Configuration Error",
-        description: "Gemini API key is not configured. Please check your environment variables.",
+        description:
+          "Gemini API key is not configured. Please check your environment variables.",
         variant: "destructive",
       });
     }
@@ -164,18 +165,32 @@ const TechnicalInterviewSimulator = () => {
 
     try {
       // Call Gemini API directly for interview setup
-      const introPrompt = `You are conducting a Technical interview for the following job details and resume. Provide a friendly introduction and the first interview question focused on technical competencies such as programming, system design, algorithms, data structures, and domain-specific technical knowledge.
+      const introPrompt = `You are Dr. Sarah Chen, a Senior Technical Architect with 15 years of experience in software engineering and system design. You are conducting a technical interview for the following position.
+
+Your interviewing style:
+- Start with a warm, professional greeting introducing yourself
+- Ask clear, structured technical questions that assess depth of knowledge
+- Follow up on answers with probing questions to test understanding
+- Focus on problem-solving approach, not just memorized answers
+- Ask about trade-offs, scalability, and real-world applications
+- Gradually increase difficulty based on candidate responses
+- Be encouraging but thorough in your assessment
 
 Job Role: ${jobDetails.role}
 Company: ${jobDetails.company}
 
-Resume:
+Candidate's Resume:
 ${jobDetails.resumeText}
 
-Your response should start with your introduction and the first question.
-Example Format:
-Hello, and welcome to this technical interview. Let's start with your first question. Can you explain how you would approach solving a complex algorithmic problem?
-`;
+Provide your introduction as Dr. Sarah Chen and ask the first technical question. Focus on:
+- Core programming concepts and language proficiency
+- Data structures and algorithms
+- System design and architecture
+- Problem-solving methodology
+- Code quality and best practices
+- Performance optimization
+
+Start naturally with your introduction and first question.`;
 
       const initialChatHistory = [
         { role: "user", parts: [{ text: introPrompt }] },
@@ -251,6 +266,88 @@ Hello, and welcome to this technical interview. Let's start with your first ques
   const processAnswer = async () => {
     if (userAnswer.trim() === "") return;
 
+    // Check if user wants to end interview
+    if (userAnswer.trim().toUpperCase() === "THANK YOU") {
+      setLoading(true);
+      const currentAnswer = userAnswer;
+      setUserAnswer("");
+
+      // Add user's thank you to log
+      const userLogEntry: LogEntry = {
+        speaker: "You",
+        text: currentAnswer,
+        timestamp: Date.now(),
+      };
+      setInterviewLog((prev) => [...prev, userLogEntry]);
+
+      // Generate early feedback
+      const updatedChatHistory = [
+        ...chatHistory,
+        { role: "user", parts: [{ text: currentAnswer }] },
+      ];
+
+      try {
+        const feedbackPrompt = `The candidate has ended the interview early by saying "${currentAnswer}". Based on the technical interview conversation so far, provide constructive feedback on their performance.
+
+Interview Type: Technical
+Job Role: ${jobDetails.role}
+Company: ${jobDetails.company}
+
+Conversation:
+${updatedChatHistory
+  .map(
+    (msg) =>
+      `${msg.role === "user" ? "Candidate" : "Dr. Sarah Chen"}: ${
+        msg.parts[0].text
+      }`
+  )
+  .join("\n")}
+
+As Dr. Sarah Chen, acknowledge their thanks professionally and provide feedback covering:
+1. Technical knowledge demonstrated so far
+2. Problem-solving approach
+3. Communication of technical concepts
+4. Areas that could have been explored further
+5. Recommendations for continued learning`;
+
+        const feedbackPayload = {
+          contents: [{ role: "user", parts: [{ text: feedbackPrompt }] }],
+        };
+        const feedbackResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(feedbackPayload),
+          }
+        );
+
+        if (feedbackResponse.ok) {
+          const feedbackResult = await feedbackResponse.json();
+          const feedbackText =
+            feedbackResult?.candidates?.[0]?.content?.parts?.[0]?.text ||
+            "Thank you for your time. Best of luck with your preparation!";
+
+          const feedbackLogEntry: LogEntry = {
+            speaker: "Feedback",
+            text: feedbackText,
+            timestamp: Date.now(),
+          };
+          setInterviewLog((prev) => [...prev, feedbackLogEntry]);
+        }
+      } catch (error) {
+        console.error("Error generating early feedback:", error);
+      }
+
+      setInterviewState("feedback");
+      setLoading(false);
+      toast({
+        title: "Interview Ended",
+        description: "Thank you for participating in this technical interview.",
+      });
+      return;
+    }
+
     // Stop listening before processing
     if (speechRecognitionRef.current && isListening) {
       speechRecognitionRef.current.stop();
@@ -281,29 +378,31 @@ Hello, and welcome to this technical interview. Let's start with your first ques
 
       if (newQuestionCount >= 5) {
         // Generate final feedback
-        const feedbackPrompt = `Based on the following technical interview conversation, provide comprehensive feedback on the candidate's performance. Include strengths, areas for improvement, and overall assessment focused on technical competencies.
+        const feedbackPrompt = `As Dr. Sarah Chen, provide comprehensive feedback on the candidate's technical interview performance. Be thorough, constructive, and professional.
 
 Interview Type: Technical
 Job Role: ${jobDetails.role}
 Company: ${jobDetails.company}
 
-Conversation:
+Complete Interview Conversation:
 ${updatedChatHistory
   .map(
     (msg, index) =>
-      `${msg.role === "user" ? "Candidate" : "Interviewer"}: ${
+      `${msg.role === "user" ? "Candidate" : "Dr. Sarah Chen"}: ${
         msg.parts[0].text
       }`
   )
   .join("\n")}
 
-Please provide detailed feedback covering:
-1. Technical knowledge and expertise
-2. Problem-solving and analytical skills
-3. Communication of technical concepts
-4. Code quality and best practices
-5. Overall fit for the technical role
-6. Specific recommendations for improvement`;
+Provide detailed feedback as Dr. Sarah Chen covering:
+1. Technical knowledge depth and breadth
+2. Problem-solving methodology and analytical thinking
+3. Understanding of system design principles
+4. Code quality awareness and best practices
+5. Communication clarity when explaining technical concepts
+6. Areas of strength demonstrated
+7. Specific areas for improvement with actionable advice
+8. Overall assessment and recommendation`;
 
         const feedbackPayload = {
           contents: [{ role: "user", parts: [{ text: feedbackPrompt }] }],
@@ -340,11 +439,43 @@ Please provide detailed feedback covering:
         });
       } else {
         // Generate next question
-        const nextQuestionPrompt = `Continue this Technical interview for the ${
+        const nextQuestionPrompt = `You are Dr. Sarah Chen continuing this technical interview for the ${
           jobDetails.role
-        } position at ${
-          jobDetails.company
-        }. Based on the candidate's resume and previous answers, ask the next relevant question focused on technical competencies such as programming, system design, algorithms, data structures, and domain-specific technical knowledge.
+        } position at ${jobDetails.company}.
+
+Your interviewing approach:
+- Build upon previous answers to go deeper
+- If the candidate struggled, adjust difficulty or explore adjacent topics
+- If they excelled, challenge them with more complex scenarios
+- Ask about real-world applications and trade-offs
+- Focus on understanding over memorization
+- Explore both theoretical knowledge and practical experience
+
+Candidate's Resume:
+${jobDetails.resumeText}
+
+Previous conversation:
+${updatedChatHistory
+  .slice(0, -1)
+  .map(
+    (msg) =>
+      `${msg.role === "user" ? "Candidate" : "Dr. Sarah Chen"}: ${
+        msg.parts[0].text
+      }`
+  )
+  .join("\n")}
+
+Candidate's last answer: ${currentAnswer}
+
+Based on their response, ask your next technical question. Focus areas:
+- System design and architecture
+- Algorithms and data structures
+- Scalability and performance
+- Security considerations
+- Testing and debugging approaches
+- Real-world problem-solving
+
+Ask one focused, clear question:
 
 Resume:
 ${jobDetails.resumeText}

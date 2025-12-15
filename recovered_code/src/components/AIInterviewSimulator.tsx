@@ -176,19 +176,31 @@ const AIInterviewSimulator = () => {
 
     try {
       // Call Gemini API directly for interview setup
-      const introPrompt = `Based on the following job details and resume, determine if this is a Technical, Managerial, or HR interview, and then provide a friendly introduction and the first interview question.
+      const introPrompt = `You are Alex Morgan, an experienced AI-powered Interview Coach with expertise across technical, managerial, and behavioral competencies. You adapt your interviewing style based on the role and candidate background.
+
+Your interviewing approach:
+- Start with a warm, professional introduction
+- Analyze the job role and resume to determine the most relevant interview focus
+- Ask questions that assess both technical skills and soft skills
+- Use a conversational yet professional tone
+- Build rapport while maintaining professionalism
+- Ask follow-up questions based on candidate responses
+- Assess cultural fit and role alignment
 
 Job Role: ${jobDetails.role}
 Company: ${jobDetails.company}
 
-Resume:
+Candidate's Resume:
 ${jobDetails.resumeText}
 
-Your response should start with the interview type, followed by your introduction and the first question.
-Example Format:
-Interview Type: Technical Review
-Hello, and welcome. Let's start with your first question. What is your experience with...
-`;
+Analyze the role and determine the primary interview focus (technical, managerial, behavioral, or mixed). Introduce yourself as Alex Morgan and ask your first question that assesses:
+- Relevant experience and background
+- Key skills for the role
+- Problem-solving approach
+- Cultural and role fit
+- Career motivations and goals
+
+Start naturally with your introduction and first question.`;
 
       const initialChatHistory = [
         { role: "user", parts: [{ text: introPrompt }] },
@@ -273,6 +285,85 @@ Hello, and welcome. Let's start with your first question. What is your experienc
   const processAnswer = async () => {
     if (userAnswer.trim() === "") return;
 
+    // Check if user wants to end interview
+    if (userAnswer.trim().toUpperCase() === "THANK YOU") {
+      setLoading(true);
+      const currentAnswer = userAnswer;
+      setUserAnswer("");
+
+      const userLogEntry: LogEntry = {
+        speaker: "You",
+        text: currentAnswer,
+        timestamp: Date.now(),
+      };
+      setInterviewLog((prev) => [...prev, userLogEntry]);
+
+      const updatedChatHistory = [
+        ...chatHistory,
+        { role: "user", parts: [{ text: currentAnswer }] },
+      ];
+
+      try {
+        const feedbackPrompt = `The candidate has ended the interview by saying "${currentAnswer}". As Alex Morgan, provide constructive feedback based on the conversation so far.
+
+Job Role: ${jobDetails.role}
+Company: ${jobDetails.company}
+
+Conversation:
+${updatedChatHistory
+  .map(
+    (msg) =>
+      `${msg.role === "user" ? "Candidate" : "Alex Morgan"}: ${
+        msg.parts[0].text
+      }`
+  )
+  .join("\n")}
+
+Acknowledge their thanks and provide feedback on:
+1. Performance in areas discussed
+2. Strengths demonstrated
+3. Areas for improvement
+4. Overall impression
+5. Next steps for preparation`;
+
+        const feedbackPayload = {
+          contents: [{ role: "user", parts: [{ text: feedbackPrompt }] }],
+        };
+        const feedbackResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(feedbackPayload),
+          }
+        );
+
+        if (feedbackResponse.ok) {
+          const feedbackResult = await feedbackResponse.json();
+          const feedbackText =
+            feedbackResult?.candidates?.[0]?.content?.parts?.[0]?.text ||
+            "Thank you for your time today. Keep preparing and best of luck!";
+
+          const feedbackLogEntry: LogEntry = {
+            speaker: "Feedback",
+            text: feedbackText,
+            timestamp: Date.now(),
+          };
+          setInterviewLog((prev) => [...prev, feedbackLogEntry]);
+        }
+      } catch (error) {
+        console.error("Error generating feedback:", error);
+      }
+
+      setInterviewState("feedback");
+      setLoading(false);
+      toast({
+        title: "Interview Ended",
+        description: "Thank you for participating in this interview.",
+      });
+      return;
+    }
+
     // Stop listening before processing
     if (speechRecognitionRef.current && isListening) {
       speechRecognitionRef.current.stop();
@@ -303,28 +394,31 @@ Hello, and welcome. Let's start with your first question. What is your experienc
 
       if (newQuestionCount >= 5) {
         // Generate final feedback
-        const feedbackPrompt = `Based on the following interview conversation, provide comprehensive feedback on the candidate's performance. Include strengths, areas for improvement, and overall assessment.
+        const feedbackPrompt = `As Alex Morgan, provide comprehensive feedback on the candidate's complete interview performance. Be thorough and constructive.
 
 Interview Type: ${interviewType}
 Job Role: ${jobDetails.role}
 Company: ${jobDetails.company}
 
-Conversation:
+Complete Interview Conversation:
 ${updatedChatHistory
   .map(
     (msg, index) =>
-      `${msg.role === "user" ? "Candidate" : "Interviewer"}: ${
+      `${msg.role === "user" ? "Candidate" : "Alex Morgan"}: ${
         msg.parts[0].text
       }`
   )
   .join("\n")}
 
-Please provide detailed feedback covering:
-1. Technical knowledge and skills
-2. Communication and clarity
-3. Problem-solving approach
-4. Overall fit for the role
-5. Specific recommendations for improvement`;
+Provide detailed feedback as Alex Morgan covering:
+1. Overall performance assessment
+2. Technical and soft skills demonstrated
+3. Communication effectiveness
+4. Problem-solving capabilities
+5. Role fit and readiness
+6. Key strengths
+7. Areas for development with specific advice
+8. Final recommendation and next steps`;
 
         const feedbackPayload = {
           contents: [{ role: "user", parts: [{ text: feedbackPrompt }] }],
@@ -365,25 +459,19 @@ Please provide detailed feedback covering:
           jobDetails.role
         } position at ${
           jobDetails.company
-        }. Based on the candidate's resume and previous answers, ask the next relevant question. Keep questions professional and focused on assessing their fit for the role.
-
-Resume:
-${jobDetails.resumeText}
-
-Previous conversation:
-${updatedChatHistory
-  .slice(0, -1)
-  .map(
-    (msg, index) =>
-      `${msg.role === "user" ? "Candidate" : "Interviewer"}: ${
-        msg.parts[0].text
-      }`
-  )
-  .join("\n")}
-
-Candidate's last answer: ${currentAnswer}
-
-Ask one focused question that builds on the conversation.`;
+        }.\n\nYou are Alex Morgan. Adapt your questioning based on:\n- The candidate's response quality and depth\n- Areas that need further exploration\n- Balance between technical and behavioral assessment\n- Building rapport while gathering insights\n\nCandidate's Resume:\n${
+          jobDetails.resumeText
+        }\n\nPrevious conversation:\n${updatedChatHistory
+          .slice(0, -1)
+          .map(
+            (msg, index) =>
+              `${msg.role === "user" ? "Candidate" : "Alex Morgan"}: ${
+                msg.parts[0].text
+              }`
+          )
+          .join(
+            "\n"
+          )}\n\nCandidate's last answer: ${currentAnswer}\n\nBased on their response, ask your next question that:\n- Builds on their previous answer\n- Assesses key competencies for the role\n- Maintains conversational flow\n- Evaluates both skills and cultural fit\n\nAsk one clear, focused question:`;
 
         const questionPayload = {
           contents: [{ role: "user", parts: [{ text: nextQuestionPrompt }] }],
