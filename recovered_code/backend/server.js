@@ -36,7 +36,8 @@ import { initializeAIServices } from './services/aiService.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config();
+// Load environment variables with explicit path
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 const server = createServer(app);

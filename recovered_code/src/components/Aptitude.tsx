@@ -1,11 +1,42 @@
 import React, { useState } from "react";
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || ""; // Load Gemini API key from .env file
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000"; // Load backend URL from .env file
+/* ============================
+   ENV CONFIG
+============================ */
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+
+/* ============================
+   GEMINI v1 API (STABLE)
+============================ */
 const API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=" +
+  "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=" +
   GEMINI_API_KEY;
 
+/* ============================
+   HELPER: CLEAN JSON
+============================ */
+function cleanGeminiJSON(text: string): string {
+  // Remove markdown code blocks
+  let cleaned = text
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
+
+  // Find the first [ and last ] to extract just the JSON array
+  const firstBracket = cleaned.indexOf("[");
+  const lastBracket = cleaned.lastIndexOf("]");
+
+  if (firstBracket !== -1 && lastBracket !== -1) {
+    cleaned = cleaned.substring(firstBracket, lastBracket + 1);
+  }
+
+  return cleaned;
+}
+
+/* ============================
+   TYPES
+============================ */
 interface Question {
   question: string;
   options: string[];
@@ -16,28 +47,40 @@ interface AptitudeProps {
   onProceed?: () => void;
 }
 
+/* ============================
+   COMPONENT
+============================ */
 const Aptitude = ({ onProceed }: AptitudeProps) => {
   const [stage, setStage] = useState<
     "initial" | "loading" | "questions" | "results" | "error"
   >("initial");
+
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [score, setScore] = useState<number>(0);
 
+  /* ============================
+     FETCH QUESTIONS
+  ============================ */
   const fetchQuestions = async () => {
     setStage("loading");
     setErrorMessage("");
 
-    // First try OpenAI via backend
+    /* ============================
+       1️⃣ TRY BACKEND (OPENAI)
+    ============================ */
     try {
-      const backendResponse = await fetch(`${BACKEND_URL}/api/aptitude/generate-questions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      });
+      const backendResponse = await fetch(
+        `${BACKEND_URL}/api/aptitude/generate-questions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
+      );
 
       if (backendResponse.ok) {
         const backendResult = await backendResponse.json();
@@ -46,48 +89,60 @@ const Aptitude = ({ onProceed }: AptitudeProps) => {
           setStage("questions");
           return;
         }
+      } else {
+        const errorData = await backendResponse.json();
+        console.warn("Backend failed:", errorData);
       }
     } catch (backendError) {
-      console.warn(
-        "Backend OpenAI failed, falling back to Gemini:",
-        backendError
-      );
+      console.warn("Backend failed, falling back to Gemini", backendError);
     }
 
-    // Fallback to Gemini
-    const userPrompt =
-      "Generate 25 unique multiple-choice questions for a general aptitude test. Each question should be a logical, mathematical, or reasoning problem. Each question object must contain a 'question' (string), an 'options' array (array of 4 strings), and a 'correctAnswer' (string) that is one of the options. Ensure the correct answer is accurately represented within the options. The questions should be diverse and cover topics such as logical reasoning, pattern recognition, quantitative aptitude, and problem-solving.";
-    const systemInstruction = {
-      parts: [
-        {
-          text: "You are a specialized AI designed to create educational quiz questions. Your task is to generate 25 multiple-choice questions formatted as a JSON array. Each question must have a question text, four options, and a single correct answer.",
-        },
-      ],
-    };
+    /* ============================
+       2️⃣ GEMINI FALLBACK (v1)
+    ============================ */
+    // Check if API key is available
+    if (!GEMINI_API_KEY) {
+      console.error("VITE_GEMINI_API_KEY is not set in environment variables");
+      setErrorMessage(
+        "Configuration error: API key not set. Please contact support."
+      );
+      setStage("error");
+      return;
+    }
 
     const payload = {
-      contents: [{ parts: [{ text: userPrompt }] }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "ARRAY",
-          items: {
-            type: "OBJECT",
-            properties: {
-              question: { type: "STRING" },
-              options: {
-                type: "ARRAY",
-                items: { type: "STRING" },
-                minItems: 4,
-                maxItems: 4,
-              },
-              correctAnswer: { type: "STRING" },
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `
+Generate exactly 25 aptitude multiple-choice questions.
+
+Return ONLY valid JSON in this exact format:
+[
+  {
+    "question": "string",
+    "options": ["A", "B", "C", "D"],
+    "correctAnswer": "one of the options"
+  }
+]
+
+Rules:
+- Exactly 4 options per question
+- correctAnswer must match one option exactly
+- No explanations
+- No markdown
+- No extra text
+`,
             },
-            required: ["question", "options", "correctAnswer"],
-          },
+          ],
         },
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 4096,
       },
-      systemInstruction: systemInstruction,
     };
 
     try {
@@ -98,31 +153,38 @@ const Aptitude = ({ onProceed }: AptitudeProps) => {
       });
 
       if (!response.ok) {
-        throw new Error("API error: " + response.statusText);
+        const errText = await response.text();
+        throw new Error(errText);
       }
 
       const result = await response.json();
-      const jsonString = result?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!jsonString) {
-        throw new Error("Invalid response format from the API.");
-      }
-      const fetchedQuestions: Question[] = JSON.parse(jsonString);
 
-      if (fetchedQuestions.length === 0) {
-        throw new Error("No questions were generated.");
+      const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!text) {
+        throw new Error("Invalid Gemini response");
       }
+
+      // Clean the response before parsing
+      const cleanedText = cleanGeminiJSON(text);
+      const fetchedQuestions: Question[] = JSON.parse(cleanedText);
+
+      if (!Array.isArray(fetchedQuestions) || fetchedQuestions.length === 0) {
+        throw new Error("No questions generated");
+      }
+
       setQuestions(fetchedQuestions);
       setStage("questions");
     } catch (error) {
-      console.error(
-        "Failed to fetch questions from both OpenAI and Gemini:",
-        error
-      );
+      console.error("Gemini failed:", error);
       setErrorMessage("Failed to fetch questions. Please try again.");
       setStage("error");
     }
   };
 
+  /* ============================
+     ANSWER HANDLERS
+  ============================ */
   const handleAnswerChange = (index: number, value: string) => {
     setAnswers((prev) => ({ ...prev, [index]: value }));
   };
@@ -136,7 +198,7 @@ const Aptitude = ({ onProceed }: AptitudeProps) => {
     });
     setScore(calculatedScore);
     setStage("results");
-    // Update pipeline stage to aptitude completed
+
     import("@/lib/pipeline").then(({ updateStage }) => {
       updateStage("aptitude");
     });
@@ -148,6 +210,9 @@ const Aptitude = ({ onProceed }: AptitudeProps) => {
     setStage("initial");
   };
 
+  /* ============================
+     UI
+  ============================ */
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
       <div className="w-full max-w-4xl bg-white rounded-xl shadow-lg p-8">
@@ -212,6 +277,7 @@ const Aptitude = ({ onProceed }: AptitudeProps) => {
                 </div>
               ))}
             </form>
+
             <div className="mt-8 text-center">
               <button
                 onClick={handleSubmit}
@@ -227,10 +293,12 @@ const Aptitude = ({ onProceed }: AptitudeProps) => {
         {stage === "results" && (
           <div className="text-center">
             <h2 className="text-3xl font-bold mb-4">Results</h2>
+
             <div className="space-y-4 max-h-[400px] overflow-y-auto">
               {questions.map((q, idx) => {
                 const isCorrect = answers[idx] === q.correctAnswer;
                 const yourAnswer = answers[idx] || "No answer";
+
                 return (
                   <div
                     key={idx}
@@ -262,20 +330,17 @@ const Aptitude = ({ onProceed }: AptitudeProps) => {
                 );
               })}
             </div>
+
             <h2 className="text-3xl font-bold my-6">
               You scored {score} out of {questions.length}!
             </h2>
+
             <button
               onClick={() => {
                 if (onProceed) {
                   onProceed();
                 } else {
-                  // Fallback to localStorage navigation
-                  try {
-                    localStorage.setItem("navigateTo", "coding");
-                  } catch (e) {
-                    /* ignore */
-                  }
+                  localStorage.setItem("navigateTo", "coding");
                   window.location.reload();
                 }
               }}
@@ -283,6 +348,7 @@ const Aptitude = ({ onProceed }: AptitudeProps) => {
             >
               Proceed to Coding Round
             </button>
+
             <button
               onClick={handleRetry}
               className="mt-4 ml-4 bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition-transform transform hover:scale-105"

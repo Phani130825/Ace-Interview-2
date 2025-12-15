@@ -28,7 +28,7 @@ declare global {
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 const API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=" +
+  "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=" +
   GEMINI_API_KEY;
 
 const languageMap = {
@@ -562,26 +562,35 @@ Make the boilerplate similarly complete for all other languages.`;
 
       // First try backend API (which uses Gemini)
       try {
-        const backendResponse = await fetch(`${BACKEND_URL}/api/coding/generate-question`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        });
+        const backendResponse = await fetch(
+          `${BACKEND_URL}/api/coding/generate-question`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+            },
+          }
+        );
 
         if (backendResponse.ok) {
           const backendResult = await backendResponse.json();
           if (backendResult.success && backendResult.question) {
             generatedQuestion = backendResult.question;
           } else {
-            console.warn("Backend returned success but no question:", backendResult);
+            console.warn(
+              "Backend returned success but no question:",
+              backendResult
+            );
           }
         } else {
           console.warn("Backend response not ok:", backendResponse.status);
         }
       } catch (backendError) {
-        console.warn("Backend Gemini failed, falling back to direct Gemini:", backendError);
+        console.warn(
+          "Backend Gemini failed, falling back to direct Gemini:",
+          backendError
+        );
       }
 
       // Fallback to direct Gemini call if backend failed or didn't return a question
@@ -594,14 +603,18 @@ Make the boilerplate similarly complete for all other languages.`;
         });
 
         if (!response.ok) {
-          throw new Error(`Gemini API call failed with status: ${response.status}`);
+          throw new Error(
+            `Gemini API call failed with status: ${response.status}`
+          );
         }
 
         const data = await response.json();
         const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
         if (!textContent) {
-          throw new Error("Invalid response from Gemini API. No text content found.");
+          throw new Error(
+            "Invalid response from Gemini API. No text content found."
+          );
         }
 
         try {
@@ -613,7 +626,9 @@ Make the boilerplate similarly complete for all other languages.`;
 
       // Ensure we have a question
       if (!generatedQuestion) {
-        throw new Error("Failed to generate question from both backend and direct API calls");
+        throw new Error(
+          "Failed to generate question from both backend and direct API calls"
+        );
       }
 
       setQuestion(generatedQuestion);

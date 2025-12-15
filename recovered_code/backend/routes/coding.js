@@ -1,295 +1,326 @@
-import express from 'express';
-import { asyncHandler } from '../middleware/errorHandler.js';
+import express from "express";
+import fetch from "node-fetch";
+import { asyncHandler } from "../middleware/errorHandler.js";
 
 const router = express.Router();
 
-// Gemini API configuration
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = 'gemini-2.5-flash-preview-05-20';
+/* ============================
+   GEMINI CONFIG
+============================ */
+const GEMINI_API_KEY = process.env.VITE_GEMINI_API_KEY;
 
-// @route   POST /api/coding/generate-question
-// @desc    Generate coding question using Gemini API
-// @access  Private
-router.post('/generate-question', asyncHandler(async (req, res) => {
+if (!GEMINI_API_KEY) {
+  console.error("GEMINI_API_KEY is not defined in environment variables");
+  console.error("Available env vars:", Object.keys(process.env).filter(k => k.includes('GEMINI')));
+}
+
+/* ============================
+   SAFE JSON CLEANER
+============================ */
+function cleanGeminiJSON(text) {
+  // Remove markdown code blocks
+  let cleaned = text
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
+  
+  // Find the first { and last } to extract just the JSON object
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  
+  if (firstBrace !== -1 && lastBrace !== -1) {
+    cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+  }
+  
+  return cleaned;
+}
+
+/* ============================
+   REPAIR INCOMPLETE JSON
+============================ */
+function repairIncompleteJSON(text) {
   try {
-    const systemPrompt = `You are a coding problem generator. Generate a problem with the following JSON schema.
-
-CRITICAL REQUIREMENTS FOR BOILERPLATE CODE:
-1. Generate partially COMPLETE(boiler template function signature + driver code), RUNNABLE code for each language that works on Judge0 online IDE.
-2. Include ALL necessary imports, class definitions, and driver code.
-3. Leave ONLY the core algorithm/logic function empty with a TODO comment.
-4. The empty function should have the correct signature and parameter names.
-5. All input parsing, function calls, and output printing should be fully implemented.
-6. The user should only need to fill in ONE function body.
-7. The code must be self-contained and runnable without external dependencies.
-8. The core function must be clearly marked with a TODO comment and no implementation.
-9. Do NOT include any solution code inside the core function.
-10. Provide an example of the expected empty function with TODO comment for each language.
-
-LANGUAGE-SPECIFIC REQUIREMENTS:
-
-PYTHON:
-- Include complete main execution block with if __name__ == "__main__".
-- Parse all inputs from stdin using input().strip() or sys.stdin.read().
-- Call the solution function with parsed arguments.
-- Print the result directly.
-- Leave only the core logic function empty with TODO comment and hints.
-- Example structure:
-  def solution_function(params):
-      # TODO: Implement the core algorithm here
-      pass
-
-  if __name__ == "__main__":
-      # Input parsing code
-      # Function call and print
-
-JAVASCRIPT (Node.js):
-- Use process.stdin for input handling.
-- Include complete input parsing and output logic.
-- Leave only the main function empty with TODO comment.
-- Example structure:
-  function solutionFunction(params) {
-      // TODO: Implement here
-  }
-
-  // Complete input reading, parsing, function call, and console.log
-
-JAVA:
-- Include complete class structure with main method.
-- Use Scanner for input parsing from System.in.
-- Include all necessary imports (java.util.Scanner).
-- Leave only the solution method in Solution class empty.
-- Handle all input parsing and method calls in main().
-- CRITICAL: Ensure the code is SYNTAX-COMPLETE with all opening and closing braces, parentheses, and semicolons.
-- The generated code MUST compile without syntax errors when the TODO method is empty.
-- Example structure:
-  import java.util.Scanner;
-
-  public class Solution {
-      public static ReturnType solutionMethod(params) {
-          // TODO: Implement here
+    // Try parsing as-is first
+    return JSON.parse(text);
+  } catch (e) {
+    // If it fails, try to repair truncated JSON
+    let repaired = text.trim();
+    
+    // Count opening and closing brackets/braces
+    const openBrackets = (repaired.match(/\[/g) || []).length;
+    const closeBrackets = (repaired.match(/]/g) || []).length;
+    const openBraces = (repaired.match(/\{/g) || []).length;
+    const closeBraces = (repaired.match(/\}/g) || []).length;
+    
+    // If we have an incomplete array at the end, try to close it
+    if (openBrackets > closeBrackets) {
+      const lastComma = repaired.lastIndexOf(',');
+      if (lastComma !== -1) {
+        // Remove incomplete item after last comma
+        repaired = repaired.substring(0, lastComma);
       }
-
-      public static void main(String[] args) {
-          Scanner sc = new Scanner(System.in);
-          // Input parsing
-          // Function call and System.out.println
-      }
+    }
+    
+    // Close any unclosed brackets
+    for (let i = 0; i < openBrackets - closeBrackets; i++) {
+      repaired += ']';
+    }
+    
+    // Close any unclosed braces
+    for (let i = 0; i < openBraces - closeBraces; i++) {
+      repaired += '}';
+    }
+    
+    // Try parsing again
+    return JSON.parse(repaired);
   }
+}
 
-C++:
-- Include all necessary headers (#include <iostream>, <vector>, etc.).
-- Complete main() function with input/output handling using cin/cout.
-- Leave only the solution function empty.
-- Use appropriate input methods (cin, getline, etc.).
-- Example structure:
-  #include <iostream>
-  #include <vector>
-  // other includes
+/* ============================
+   STABLE MODEL (MATCH APTITUDE)
+============================ */
+const GEMINI_API_URL =
+  `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
-  ReturnType solutionFunction(params) {
-      // TODO: Implement here
-  }
+/* ============================
+   POST /api/coding/generate-question
+============================ */
+router.post(
+  "/generate-question",
+  asyncHandler(async (req, res) => {
+    try {
+      const prompt = `
+Generate a coding problem for a medium difficulty challenge.
 
-  int main() {
-      // Input parsing with cin
-      // Function call and cout
-      return 0;
-  }
+Return ONLY valid JSON in this exact format with NO additional text:
+{
+  "title": "Problem Title",
+  "functionName": "functionName",
+  "description": "Clear problem description with examples",
+  "inputFormat": "Description of input format",
+  "outputFormat": "Description of output format",
+  "constraints": "List of constraints",
+  "boilerplateCode": {
+    "javascript": {
+      "functionSignature": "Complete Node.js code with only core function empty",
+      "mainDriver": ""
+    },
+    "python": {
+      "functionSignature": "Complete Python code with only core function empty",
+      "mainDriver": ""
+    },
+    "java": {
+      "functionSignature": "Complete Java code with only core method empty",
+      "mainDriver": ""
+    },
+    "cpp": {
+      "functionSignature": "Complete C++ code with only core function empty",
+      "mainDriver": ""
+    }
+  },
+  "sampleTestCases": [
+    {"input": "test input", "output": "expected output"},
+    {"input": "test input", "output": "expected output"},
+    {"input": "test input", "output": "expected output"}
+  ],
+  "hiddenTestCases": [
+    {"input": "test input", "output": "expected output"},
+    {"input": "test input", "output": "expected output"},
+    {"input": "test input", "output": "expected output"},
+    {"input": "test input", "output": "expected output"},
+    {"input": "test input", "output": "expected output"}
+  ]
+}
 
-Ensure the boilerplate is complete and runnable on Judge0 - users should only implement the core function logic.`;
+CRITICAL BOILERPLATE REQUIREMENTS:
+1. Generate COMPLETE, RUNNABLE code for each language that works on Judge0
+2. Include ALL necessary imports, input parsing, and driver code
+3. Leave ONLY the core algorithm function empty with TODO comment
+4. User should only fill in ONE function body
+5. Code must be self-contained and runnable immediately after user implements core function
 
-    const userQuery = `Generate a coding problem for a medium difficulty challenge. The problem should have:
-1. Clear description with examples
-2. Proper input/output formats and constraints
-3. 3 sample test cases and 5 hidden test cases
-4. COMPLETE boilerplate code for all languages
-
-For the boilerplate code:
-- Generate FULL, COMPLETE, RUNNABLE code
-- Include ALL imports, input parsing, main/driver code
-- Leave ONLY ONE core function empty with TODO comments and hints
-- User should only fill in the algorithm logic, nothing else
-- Test cases should work immediately after user implements the core function
-
-Example of what the Python boilerplate should look like:
-\`\`\`python
-def solution_function(param1, param2):
+PYTHON Example:
+def solution_function(params):
     # TODO: Implement the core algorithm here
-    # Hint: [specific hint about the approach]
-    # Your code here
     pass
 
 if __name__ == "__main__":
     # Complete input parsing
-    line1 = input().strip()
-    line2 = input().strip()
-    # Parse inputs appropriately
-    param1 = int(line1)
-    param2 = list(map(int, line2.split()))
-
-    # Call solution and print result
-    result = solution_function(param1, param2)
+    result = solution_function(parsed_input)
     print(result)
-\`\`\`
 
-Make the boilerplate similarly complete for all other languages.`;
+JAVASCRIPT Example:
+function solutionFunction(params) {
+    // TODO: Implement here
+}
 
-    const payload = {
-      contents: [{ parts: [{ text: userQuery }] }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "OBJECT",
-          properties: {
-            title: { type: "STRING" },
-            functionName: { type: "STRING" },
-            description: { type: "STRING" },
-            inputFormat: { type: "STRING" },
-            outputFormat: { type: "STRING" },
-            constraints: { type: "STRING" },
-            boilerplateCode: {
-              type: "OBJECT",
-              properties: {
-                javascript: {
-                  type: "OBJECT",
-                  properties: {
-                    functionSignature: {
-                      type: "STRING",
-                      description:
-                        "Complete code with only core function empty",
-                    },
-                    mainDriver: {
-                      type: "STRING",
-                      description:
-                        "Empty string as all code is in functionSignature",
-                    },
-                  },
-                },
-                python: {
-                  type: "OBJECT",
-                  properties: {
-                    functionSignature: {
-                      type: "STRING",
-                      description:
-                        "Complete code with only core function empty",
-                    },
-                    mainDriver: {
-                      type: "STRING",
-                      description:
-                        "Empty string as all code is in functionSignature",
-                    },
-                  },
-                },
-                java: {
-                  type: "OBJECT",
-                  properties: {
-                    functionSignature: {
-                      type: "STRING",
-                      description:
-                        "Complete code with only core method in Solution class empty",
-                    },
-                    mainDriver: {
-                      type: "STRING",
-                      description:
-                        "Empty string as all code is in functionSignature",
-                    },
-                  },
-                },
-                cpp: {
-                  type: "OBJECT",
-                  properties: {
-                    functionSignature: {
-                      type: "STRING",
-                      description:
-                        "Complete code with only core function empty",
-                    },
-                    mainDriver: {
-                      type: "STRING",
-                      description:
-                        "Empty string as all code is in functionSignature",
-                    },
-                  },
-                },
-              },
-            },
-            sampleTestCases: {
-              type: "ARRAY",
-              items: {
-                type: "OBJECT",
-                properties: {
-                  input: { type: "STRING" },
-                  output: { type: "STRING" },
-                },
-              },
-            },
-            hiddenTestCases: {
-              type: "ARRAY",
-              items: {
-                type: "OBJECT",
-                properties: {
-                  input: { type: "STRING" },
-                  output: { type: "STRING" },
-                },
-              },
-            },
+// Complete input reading and output
+process.stdin.on('data', (data) => {
+    const result = solutionFunction(parsed);
+    console.log(result);
+});
+
+JAVA Example:
+import java.util.Scanner;
+
+public class Solution {
+    public static ReturnType solutionMethod(params) {
+        // TODO: Implement here
+        return null;
+    }
+
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        // Complete input parsing
+        ReturnType result = solutionMethod(parsed);
+        System.out.println(result);
+    }
+}
+
+C++ Example:
+#include <iostream>
+using namespace std;
+
+ReturnType solutionFunction(params) {
+    // TODO: Implement here
+}
+
+int main() {
+    // Complete input parsing
+    ReturnType result = solutionFunction(parsed);
+    cout << result << endl;
+    return 0;
+}
+
+CRITICAL RULES:
+- Output ONLY the JSON object, nothing else
+- Exactly 3 sample test cases and 5 hidden test cases
+- All boilerplate code must be complete except for the core function
+- No explanations, no markdown, no code blocks
+- Ensure proper syntax with all braces and parentheses closed
+`;
+
+      const payload = {
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
           },
+        ],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 8192,
+          topP: 0.95,
+          topK: 40,
         },
-      },
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-    };
+      };
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+      const response = await fetch(GEMINI_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Gemini API Error: ${response.status} - ${response.statusText}`, errorText);
-
-      if (response.status === 403) {
-        return res.status(403).json({
-          success: false,
-          error: 'API authentication failed. Please check your API key configuration.'
-        });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Gemini API error ${response.status}: ${errText}`);
       }
 
-      throw new Error('Gemini API returned a non-OK status');
-    }
+      const result = await response.json();
 
-    const result = await response.json();
-    const textContent = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+      const rawText =
+        result?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!textContent) {
-      throw new Error(
-        "Invalid response from Gemini API. No text content found."
+      if (!rawText) {
+        throw new Error("Empty response from Gemini");
+      }
+
+      const cleanedText = cleanGeminiJSON(rawText);
+
+      let question;
+      try {
+        question = repairIncompleteJSON(cleanedText);
+      } catch (parseError) {
+        console.error("=== JSON PARSE ERROR ===");
+        console.error("Parse error:", parseError.message);
+        console.error("Cleaned text (first 500 chars):", cleanedText.substring(0, 500));
+        console.error("Cleaned text (last 500 chars):", cleanedText.substring(Math.max(0, cleanedText.length - 500)));
+        console.error("Raw text length:", rawText.length);
+        throw new Error("Gemini returned invalid JSON");
+      }
+
+      /* ============================
+         VALIDATE STRUCTURE
+      ============================ */
+      if (typeof question !== 'object' || question === null) {
+        throw new Error("Response is not an object");
+      }
+
+      // Validate required fields
+      const requiredFields = [
+        'title',
+        'functionName',
+        'description',
+        'inputFormat',
+        'outputFormat',
+        'constraints',
+        'boilerplateCode',
+        'sampleTestCases',
+        'hiddenTestCases'
+      ];
+
+      const missingFields = requiredFields.filter(field => !question[field]);
+      if (missingFields.length > 0) {
+        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+      }
+
+      // Validate boilerplate code structure
+      const requiredLanguages = ['javascript', 'python', 'java', 'cpp'];
+      const missingLanguages = requiredLanguages.filter(
+        lang => !question.boilerplateCode[lang] || 
+               !question.boilerplateCode[lang].functionSignature
       );
-    }
 
-    const generatedQuestion = JSON.parse(textContent);
+      if (missingLanguages.length > 0) {
+        throw new Error(`Missing boilerplate for languages: ${missingLanguages.join(', ')}`);
+      }
 
-    res.json({
-      success: true,
-      question: generatedQuestion
-    });
+      // Validate test cases
+      if (!Array.isArray(question.sampleTestCases) || question.sampleTestCases.length < 2) {
+        throw new Error("Need at least 2 sample test cases");
+      }
 
-  } catch (error) {
-    console.error('Coding question generation error:', error);
+      if (!Array.isArray(question.hiddenTestCases) || question.hiddenTestCases.length < 3) {
+        throw new Error("Need at least 3 hidden test cases");
+      }
 
-    if (error.message.includes('403') || error.message.includes('authentication')) {
-      return res.status(403).json({
+      // Validate test case structure
+      const allTestCases = [...question.sampleTestCases, ...question.hiddenTestCases];
+      const invalidTestCases = allTestCases.filter(
+        tc => !tc.input || !tc.output
+      );
+
+      if (invalidTestCases.length > 0) {
+        console.warn(`${invalidTestCases.length} test cases are missing input/output`);
+      }
+
+      res.json({
+        success: true,
+        question: question,
+      });
+    } catch (error) {
+      console.error("Coding question generation error:", error.message);
+      console.error("Error stack:", error.stack);
+
+      res.status(500).json({
         success: false,
-        error: 'API authentication failed. Please check your API key configuration.'
+        error: "Failed to generate coding question",
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined,
       });
     }
-
-    res.status(500).json({
-      success: false,
-      error: 'Failed to generate coding question. Please try again.'
-    });
-  }
-}));
+  })
+);
 
 export default router;
