@@ -17,6 +17,7 @@ import Register from "@/components/Register";
 import PipelineDashboard from "@/components/PipelineDashboard";
 import ResumeLatexGenerator from "@/components/ResumeLatexGenerator";
 import ResumePDFGenerator from "@/components/ResumePDFGenerator";
+import AllSessions from "@/components/AllSessions";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -29,6 +30,7 @@ type AppView =
   | "coding"
   | "interview"
   | "analytics"
+  | "allSessions"
   | "schedule"
   | "settings"
   | "login"
@@ -190,6 +192,8 @@ const Index = () => {
         return <Settings />;
       case "analytics":
         return <PerformanceAnalytics />;
+      case "allSessions":
+        return <AllSessions onNavigate={setCurrentView} />;
       case "performance":
         return <PerformanceReport />;
       case "pipelines":

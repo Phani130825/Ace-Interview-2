@@ -33,6 +33,7 @@ interface DashboardProps {
       | "coding"
       | "interview"
       | "analytics"
+      | "allSessions"
       | "schedule"
       | "settings"
       | "pipelines"
@@ -71,26 +72,26 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
         const codingTests = getCodingTests();
 
         // Calculate performance stats from fetched data
+        let aptitudeSum = 0;
+        for (const test of aptitudeTests) {
+          aptitudeSum += test.percentage;
+        }
+
+        let codingSum = 0;
+        for (const test of codingTests) {
+          codingSum += test.percentage;
+        }
+
         const stats = {
           aptitude: {
             total: aptitudeTests.length,
             averageScore:
-              aptitudeTests.length > 0
-                ? aptitudeTests.reduce(
-                    (sum: any, test: any) => sum + test.percentage,
-                    0
-                  ) / aptitudeTests.length
-                : 0,
+              aptitudeTests.length > 0 ? aptitudeSum / aptitudeTests.length : 0,
           },
           coding: {
             total: codingTests.length,
             averageScore:
-              codingTests.length > 0
-                ? codingTests.reduce(
-                    (sum: any, test: any) => sum + test.percentage,
-                    0
-                  ) / codingTests.length
-                : 0,
+              codingTests.length > 0 ? codingSum / codingTests.length : 0,
           },
           interviews: {
             total: interviews.length,
@@ -513,7 +514,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
               <Button
                 variant="ghost"
                 className="w-full mt-4"
-                onClick={() => onNavigate("analytics")}
+                onClick={() => onNavigate("allSessions")}
               >
                 View All Sessions
               </Button>
