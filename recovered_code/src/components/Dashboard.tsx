@@ -592,30 +592,6 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
                     </Button>
                   </div>
 
-                  <div className="p-6 border rounded-xl bg-gradient-to-r from-green-50 to-green-100/50">
-                    <div className="flex items-center gap-4 mb-4">
-                      <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                        <Video className="h-6 w-6 text-green-600" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900">
-                          AI Interview Simulator
-                        </h3>
-                        <p className="text-sm text-gray-600">
-                          Real-time AI conversation with speech recognition and
-                          TTS
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="professional"
-                      className="w-full"
-                      onClick={() => onNavigate("ai-interview")}
-                    >
-                      Start AI Interview
-                    </Button>
-                  </div>
-
                   <div className="p-6 border rounded-xl bg-gradient-to-r from-red-50 to-red-100/50">
                     <div className="flex items-center gap-4 mb-4">
                       <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">

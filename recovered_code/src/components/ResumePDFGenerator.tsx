@@ -182,11 +182,10 @@ const ResumePDFGenerator = () => {
 
 Return ONLY the JSON object, no additional text or formatting.`;
 
-      const userQuery = `Extract structured data from this resume text:\n\n${resumeText}`;
+      const combinedPrompt = `${systemPrompt}\n\nExtract structured data from this resume text:\n\n${resumeText}`;
 
       const payload = {
-        contents: [{ parts: [{ text: userQuery }] }],
-        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ parts: [{ text: combinedPrompt }] }],
       };
 
       const result = await callGeminiAPI(payload);
@@ -247,15 +246,14 @@ Return ONLY the JSON object, no additional text or formatting.`;
 
 Return the optimized resume data in the SAME JSON structure as the input. Only modify the content to be more relevant to the job description. Do not add or remove sections.`;
 
-      const userQuery = `Original Resume Data:\n${JSON.stringify(
+      const combinedPrompt = `${systemPrompt}\n\nOriginal Resume Data:\n${JSON.stringify(
         extractedData,
         null,
         2
       )}\n\nJob Description:\n${jobDescription}`;
 
       const payload = {
-        contents: [{ parts: [{ text: userQuery }] }],
-        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ parts: [{ text: combinedPrompt }] }],
       };
 
       const result = await callGeminiAPI(payload);
