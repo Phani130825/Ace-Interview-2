@@ -112,7 +112,7 @@
     <!-- JavaScript Logic -->
     <script>
         // API Configuration
-        const MODEL_NAME = 'gemini-2.5-flash-preview-05-20';
+        const MODEL_NAME = 'gemini-2.5-flash';
         const apiKey = ""; // Leave as-is, canvas will provide it at runtime.
 
         // DOM Elements
@@ -134,7 +134,7 @@
          * @param {number} retries - Current retry count.
          */
         async function callGeminiApi(userPrompt, systemPrompt, retries = 0) {
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
 
             const payload = {
                 contents: [{ parts: [{ text: userPrompt }] }],

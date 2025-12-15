@@ -43,23 +43,30 @@ function repairIncompleteJSON(text) {
     // Try parsing as-is first
     return JSON.parse(text);
   } catch (e) {
-    // If it fails, try to repair truncated JSON
+    console.log('Initial parse failed, attempting repair...');
     let repaired = text.trim();
+    
+    // Handle unterminated strings by finding the last complete string
+    if (e.message.includes('Unterminated string')) {
+      // Find the last complete quote before truncation
+      const lastCompleteQuote = repaired.lastIndexOf('"');
+      if (lastCompleteQuote !== -1) {
+        // Look for the comma or bracket before this incomplete field
+        let truncateAt = repaired.lastIndexOf(',', lastCompleteQuote);
+        if (truncateAt === -1) {
+          truncateAt = repaired.lastIndexOf('{', lastCompleteQuote);
+        }
+        if (truncateAt !== -1) {
+          repaired = repaired.substring(0, truncateAt);
+        }
+      }
+    }
     
     // Count opening and closing brackets/braces
     const openBrackets = (repaired.match(/\[/g) || []).length;
     const closeBrackets = (repaired.match(/]/g) || []).length;
     const openBraces = (repaired.match(/\{/g) || []).length;
     const closeBraces = (repaired.match(/\}/g) || []).length;
-    
-    // If we have an incomplete array at the end, try to close it
-    if (openBrackets > closeBrackets) {
-      const lastComma = repaired.lastIndexOf(',');
-      if (lastComma !== -1) {
-        // Remove incomplete item after last comma
-        repaired = repaired.substring(0, lastComma);
-      }
-    }
     
     // Close any unclosed brackets
     for (let i = 0; i < openBrackets - closeBrackets; i++) {
@@ -71,6 +78,7 @@ function repairIncompleteJSON(text) {
       repaired += '}';
     }
     
+    console.log('Repair attempted, trying parse again...');
     // Try parsing again
     return JSON.parse(repaired);
   }
@@ -89,116 +97,84 @@ router.post(
   "/generate-question",
   asyncHandler(async (req, res) => {
     try {
-      const prompt = `
-Generate a coding problem for a medium difficulty challenge.
+      const prompt = `Generate a medium difficulty coding problem.
 
-Return ONLY valid JSON in this exact format with NO additional text:
+Return ONLY valid JSON (no markdown, no explanations):
 {
   "title": "Problem Title",
   "functionName": "functionName",
-  "description": "Clear problem description with examples",
-  "inputFormat": "Description of input format",
-  "outputFormat": "Description of output format",
-  "constraints": "List of constraints",
+  "description": "Problem description with 2 examples",
+  "inputFormat": "Input format",
+  "outputFormat": "Output format",
+  "constraints": "Constraints",
   "boilerplateCode": {
-    "javascript": {
-      "functionSignature": "Complete Node.js code with only core function empty",
-      "mainDriver": ""
-    },
-    "python": {
-      "functionSignature": "Complete Python code with only core function empty",
-      "mainDriver": ""
-    },
-    "java": {
-      "functionSignature": "Complete Java code with only core method empty",
-      "mainDriver": ""
-    },
-    "cpp": {
-      "functionSignature": "Complete C++ code with only core function empty",
-      "mainDriver": ""
-    }
+    "javascript": {"functionSignature": "Complete runnable Node.js code with TODO in main function", "mainDriver": ""},
+    "python": {"functionSignature": "Complete runnable Python code with TODO in main function", "mainDriver": ""},
+    "java": {"functionSignature": "Complete runnable Java code with TODO in main method", "mainDriver": ""},
+    "cpp": {"functionSignature": "Complete runnable C++ code with TODO in main function", "mainDriver": ""}
   },
-  "sampleTestCases": [
-    {"input": "test input", "output": "expected output"},
-    {"input": "test input", "output": "expected output"},
-    {"input": "test input", "output": "expected output"}
-  ],
-  "hiddenTestCases": [
-    {"input": "test input", "output": "expected output"},
-    {"input": "test input", "output": "expected output"},
-    {"input": "test input", "output": "expected output"},
-    {"input": "test input", "output": "expected output"},
-    {"input": "test input", "output": "expected output"}
-  ]
+  "sampleTestCases": [{"input": "", "output": ""}, {"input": "", "output": ""}, {"input": "", "output": ""}],
+  "hiddenTestCases": [{"input": "", "output": ""}, {"input": "", "output": ""}, {"input": "", "output": ""}, {"input": "", "output": ""}, {"input": "", "output": ""}]
 }
 
-CRITICAL BOILERPLATE REQUIREMENTS:
-1. Generate COMPLETE, RUNNABLE code for each language that works on Judge0
-2. Include ALL necessary imports, input parsing, and driver code
-3. Leave ONLY the core algorithm function empty with TODO comment
-4. User should only fill in ONE function body
-5. Code must be self-contained and runnable immediately after user implements core function
+Boilerplate requirements:
+- Include ALL imports, input parsing, and driver code
+- Leave ONLY the core algorithm function empty with TODO
+- Must be immediately runnable on Judge0 after implementing TODO
+- Keep code concise but complete
 
-PYTHON Example:
-def solution_function(params):
-    # TODO: Implement the core algorithm here
+Examples:
+
+Python:
+def solve(params):
+    # TODO: Implement
     pass
 
 if __name__ == "__main__":
-    # Complete input parsing
-    result = solution_function(parsed_input)
+    line = input().strip()
+    result = solve(line)
     print(result)
 
-JAVASCRIPT Example:
-function solutionFunction(params) {
-    // TODO: Implement here
-}
+JavaScript:
+const solve = (params) => {
+    // TODO: Implement
+};
 
-// Complete input reading and output
-process.stdin.on('data', (data) => {
-    const result = solutionFunction(parsed);
-    console.log(result);
-});
+const input = require('fs').readFileSync(0, 'utf-8').trim();
+console.log(solve(input));
 
-JAVA Example:
-import java.util.Scanner;
-
+Java:
+import java.util.*;
 public class Solution {
-    public static ReturnType solutionMethod(params) {
-        // TODO: Implement here
-        return null;
+    static int solve(String input) {
+        // TODO: Implement
+        return 0;
     }
-
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
-        // Complete input parsing
-        ReturnType result = solutionMethod(parsed);
-        System.out.println(result);
+        String input = sc.nextLine();
+        System.out.println(solve(input));
     }
 }
 
-C++ Example:
+C++:
 #include <iostream>
+#include <string>
 using namespace std;
 
-ReturnType solutionFunction(params) {
-    // TODO: Implement here
-}
-
-int main() {
-    // Complete input parsing
-    ReturnType result = solutionFunction(parsed);
-    cout << result << endl;
+int solve(string input) {
+    // TODO: Implement
     return 0;
 }
 
-CRITICAL RULES:
-- Output ONLY the JSON object, nothing else
-- Exactly 3 sample test cases and 5 hidden test cases
-- All boilerplate code must be complete except for the core function
-- No explanations, no markdown, no code blocks
-- Ensure proper syntax with all braces and parentheses closed
-`;
+int main() {
+    string input;
+    getline(cin, input);
+    cout << solve(input) << endl;
+    return 0;
+}
+
+IMPORTANT: Keep description concise, focus on clear problem statement.`;
 
       const payload = {
         contents: [
@@ -209,7 +185,7 @@ CRITICAL RULES:
         ],
         generationConfig: {
           temperature: 0.7,
-          maxOutputTokens: 8192,
+          maxOutputTokens: 16384,
           topP: 0.95,
           topK: 40,
         },
@@ -236,6 +212,14 @@ CRITICAL RULES:
       if (!rawText) {
         throw new Error("Empty response from Gemini");
       }
+
+      // Check if response was truncated
+      const finishReason = result?.candidates?.[0]?.finishReason;
+      if (finishReason === 'MAX_TOKENS') {
+        console.warn('Response was truncated due to token limit');
+      }
+
+      console.log(`Response length: ${rawText.length} chars, finish reason: ${finishReason}`);
 
       const cleanedText = cleanGeminiJSON(rawText);
 

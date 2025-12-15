@@ -48,6 +48,17 @@ const TechnicalInterviewSimulator = () => {
   const speechRecognitionRef = useRef<any>(null);
   const { toast } = useToast();
 
+  // Validate API key on mount
+  useEffect(() => {
+    if (!GEMINI_API_KEY) {
+      toast({
+        title: "Configuration Error",
+        description: "Gemini API key is not configured. Please check your environment variables.",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
   // Speech Recognition Setup
   useEffect(() => {
     const SpeechRecognition =
@@ -107,29 +118,7 @@ const TechnicalInterviewSimulator = () => {
     }
   }, [interviewLog]);
 
-  // Poll for session updates (alternative to Socket.IO)
-  useEffect(() => {
-    if (!sessionId || interviewState === "setup") return;
-
-    const pollInterval = setInterval(async () => {
-      try {
-        const token = localStorage.getItem("token");
-        const response = await axios.get(
-          `${API_BASE_URL}/api/ai-interview/${sessionId}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        if (response.data.success && response.data.session) {
-          setInterviewLog(response.data.session.log || []);
-          setInterviewState(response.data.session.state);
-        }
-      } catch (error) {
-        console.error("Error polling session:", error);
-      }
-    }, 3000); // Poll every 3 seconds
-
-    return () => clearInterval(pollInterval);
-  }, [sessionId, interviewState]);
+  // Note: Using direct Gemini API calls, no backend polling needed
 
   // Text-to-Speech Helper
   const speakText = (text: string) => {
@@ -192,7 +181,7 @@ Hello, and welcome to this technical interview. Let's start with your first ques
         { role: "user", parts: [{ text: introPrompt }] },
       ];
       const payload = { contents: initialChatHistory };
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
+      const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -320,7 +309,7 @@ Please provide detailed feedback covering:
           contents: [{ role: "user", parts: [{ text: feedbackPrompt }] }],
         };
         const feedbackResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`,
+          `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -379,7 +368,7 @@ Ask one focused question that builds on the conversation and assesses technical 
           contents: [{ role: "user", parts: [{ text: nextQuestionPrompt }] }],
         };
         const questionResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`,
+          `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -437,16 +426,7 @@ Ask one focused question that builds on the conversation and assesses technical 
   };
 
   const resetInterview = () => {
-    if (sessionId) {
-      const token = localStorage.getItem("token");
-      axios
-        .post(
-          `${API_BASE_URL}/api/ai-interview/${sessionId}/reset`,
-          {},
-          { headers: { Authorization: `Bearer ${token}` } }
-        )
-        .catch(console.error);
-    }
+    // Reset local state (no backend call needed for standalone mode)
 
     setInterviewState("setup");
     setInterviewLog([]);

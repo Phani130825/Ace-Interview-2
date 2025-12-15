@@ -15,7 +15,7 @@ class AIService {
     this.model = process.env.OPENAI_MODEL || 'gpt-4';
     this.maxTokens = parseInt(process.env.AI_MAX_TOKENS) || 4000;
     this.geminiApiKey = process.env.GEMINI_API_KEY;
-    this.geminiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
+    this.geminiUrl = 'https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent';
     this.isAvailable = false;
   }
 

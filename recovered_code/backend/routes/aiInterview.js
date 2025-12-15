@@ -6,7 +6,7 @@ const router = express.Router();
 
 // Gemini API configuration
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_TEXT_MODEL = 'gemini-2.0-flash-exp';
+const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
 const GEMINI_TTS_MODEL = 'gemini-2.0-flash-tts';
 
 // @route   POST /api/ai-interview/create
@@ -317,7 +317,7 @@ router.post('/tts/generate', asyncHandler(async (req, res) => {
 async function callGeminiTextApi(prompt) {
   const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
   const payload = { contents: chatHistory };
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  const apiUrl = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_TEXT_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
   const response = await fetch(apiUrl, {
     method: 'POST',
@@ -351,7 +351,7 @@ async function callGeminiTTSApi(text) {
     }
   };
   
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  const apiUrl = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_TTS_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
   const response = await fetch(apiUrl, {
     method: 'POST',
