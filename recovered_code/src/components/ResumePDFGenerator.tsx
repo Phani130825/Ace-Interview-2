@@ -72,20 +72,32 @@ const ResumePDFGenerator = ({ onNavigate }: ResumePDFGeneratorProps = {}) => {
   const [message, setMessage] = useState<string>("");
   const [isError, setIsError] = useState<boolean>(false);
   const [showBackConfirm, setShowBackConfirm] = useState<boolean>(false);
+  const [lastApiCall, setLastApiCall] = useState<number>(0);
 
   const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+  const MIN_API_CALL_INTERVAL = 2000; // Minimum 2 seconds between API calls
 
   const showMessage = (msg: string, error: boolean = false) => {
     setMessage(msg);
     setIsError(error);
   };
 
-  const callGeminiAPI = async (payload: any, maxRetries: number = 3) => {
+  const callGeminiAPI = async (payload: any, maxRetries: number = 5) => {
     const apiKey = GEMINI_API_KEY || "";
     const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
+    // Enforce minimum interval between API calls
+    const now = Date.now();
+    const timeSinceLastCall = now - lastApiCall;
+    if (timeSinceLastCall < MIN_API_CALL_INTERVAL) {
+      const waitTime = MIN_API_CALL_INTERVAL - timeSinceLastCall;
+      console.log(`Waiting ${waitTime}ms to respect rate limits...`);
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+    }
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
+        setLastApiCall(Date.now());
         const response = await fetch(apiUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -93,15 +105,21 @@ const ResumePDFGenerator = ({ onNavigate }: ResumePDFGeneratorProps = {}) => {
         });
 
         if (response.status === 429) {
-          const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+          // For rate limit errors, use longer exponential backoff
+          const baseDelay = 3000; // Start with 3 seconds
+          const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
           console.warn(
-            `Rate limit exceeded. Retrying in ${Math.floor(delay)}ms...`
+            `Rate limit exceeded. Retrying in ${Math.floor(
+              delay / 1000
+            )} seconds...`
           );
           if (attempt < maxRetries - 1) {
             await new Promise((resolve) => setTimeout(resolve, delay));
             continue;
           }
-          throw new Error("API rate limit exceeded after multiple retries.");
+          throw new Error(
+            "Gemini API rate limit exceeded. Please wait a few minutes and try again, or consider upgrading your API quota."
+          );
         }
 
         if (!response.ok) {
@@ -114,16 +132,19 @@ const ResumePDFGenerator = ({ onNavigate }: ResumePDFGeneratorProps = {}) => {
         return await response.json();
       } catch (error) {
         console.error(
-          `Attempt ${attempt + 1} failed:`,
+          `Attempt ${attempt + 1} of ${maxRetries} failed:`,
           (error as Error).message
         );
         if (attempt === maxRetries - 1) {
           throw new Error(
-            "Failed to connect to the API after multiple retries."
+            `Failed to connect to Gemini API after ${maxRetries} attempts. ${
+              (error as Error).message
+            }`
           );
         }
-        const delay = Math.pow(2, attempt + 1) * 1000 + Math.random() * 1000;
-        console.warn(`Retrying in ${Math.floor(delay)}ms...`);
+        // For non-429 errors, use shorter delays
+        const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+        console.warn(`Retrying in ${Math.floor(delay / 1000)} seconds...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
@@ -239,12 +260,25 @@ Return ONLY the JSON object, no additional text or formatting.`;
       }
     } catch (error) {
       console.error("Data extraction error:", error);
-      showMessage(
-        `Data extraction failed: ${
-          (error as Error).message
-        }. Please check your input and try again.`,
-        true
-      );
+      const errorMsg = (error as Error).message;
+
+      // Provide user-friendly error messages
+      if (errorMsg.includes("rate limit")) {
+        showMessage(
+          "⏳ Gemini API rate limit reached. Please wait 2-3 minutes before trying again, or consider using a different API key with higher quota.",
+          true
+        );
+      } else if (errorMsg.includes("Failed to connect")) {
+        showMessage(
+          "❌ Network error. Please check your internet connection and try again.",
+          true
+        );
+      } else {
+        showMessage(
+          `Data extraction failed: ${errorMsg}. Please check your input and try again.`,
+          true
+        );
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -306,10 +340,25 @@ Return the optimized resume data in the SAME JSON structure as the input. Only m
       }
     } catch (error) {
       console.error("Optimization error:", error);
-      showMessage(
-        `Optimization failed: ${(error as Error).message}. Please try again.`,
-        true
-      );
+      const errorMsg = (error as Error).message;
+
+      // Provide user-friendly error messages
+      if (errorMsg.includes("rate limit")) {
+        showMessage(
+          "⏳ Gemini API rate limit reached. Please wait 2-3 minutes before trying again, or consider using a different API key with higher quota.",
+          true
+        );
+      } else if (errorMsg.includes("Failed to connect")) {
+        showMessage(
+          "❌ Network error. Please check your internet connection and try again.",
+          true
+        );
+      } else {
+        showMessage(
+          `Optimization failed: ${errorMsg}. Please try again in a moment.`,
+          true
+        );
+      }
     } finally {
       setIsProcessing(false);
     }
