@@ -47,6 +47,24 @@ const Index = () => {
   );
   const { isAuthenticated, isLoading } = useAuth();
 
+  // Handle browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const view = event.state?.view || "landing";
+      setCurrentView(view as AppView); // Direct state update for history navigation
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  // Initialize browser history with current view
+  useEffect(() => {
+    if (!window.history.state?.view) {
+      window.history.replaceState({ view: currentView }, "", "");
+    }
+  }, []);
+
   // Listen for cross-component navigation intents via localStorage
   useEffect(() => {
     const applyNav = () => {
@@ -54,7 +72,7 @@ const Index = () => {
         const nav = window.localStorage.getItem("navigateTo");
         if (nav) {
           window.localStorage.removeItem("navigateTo");
-          setCurrentView(nav as AppView);
+          handleNavigate(nav as AppView);
         }
       } catch (e) {
         /* ignore */
@@ -63,7 +81,7 @@ const Index = () => {
     applyNav();
     const handler = (e: StorageEvent) => {
       if (e.key === "navigateTo" && e.newValue) {
-        setCurrentView(e.newValue as AppView);
+        handleNavigate(e.newValue as AppView);
         try {
           window.localStorage.removeItem("navigateTo");
         } catch (err) {
@@ -74,6 +92,12 @@ const Index = () => {
     window.addEventListener("storage", handler);
     return () => window.removeEventListener("storage", handler);
   }, []);
+
+  // Navigation handler with history management
+  const handleNavigate = (view: AppView) => {
+    setCurrentView(view);
+    window.history.pushState({ view }, "", "");
+  };
 
   // Handle authentication state changes - only redirect to dashboard if no pending navigation
   useEffect(() => {
@@ -87,7 +111,7 @@ const Index = () => {
       // Check if there's a pending navigation before redirecting to dashboard
       const pendingNav = window.localStorage.getItem("navigateTo");
       if (!pendingNav) {
-        setCurrentView("dashboard");
+        handleNavigate("dashboard");
       }
     }
   }, [isAuthenticated, isLoading, currentView]);
@@ -95,11 +119,11 @@ const Index = () => {
   const renderCurrentView = () => {
     switch (currentView) {
       case "login":
-        return <Login onSwitchToRegister={() => setCurrentView("register")} />;
+        return <Login onSwitchToRegister={() => handleNavigate("register")} />;
       case "register":
-        return <Register onSwitchToLogin={() => setCurrentView("login")} />;
+        return <Register onSwitchToLogin={() => handleNavigate("login")} />;
       case "dashboard":
-        return <Dashboard onNavigate={setCurrentView} />;
+        return <Dashboard onNavigate={handleNavigate} />;
       case "upload": {
         // pick up resumeId handed via localStorage if present
         const navId =
@@ -111,11 +135,11 @@ const Index = () => {
           <ResumeUpload
             onUploaded={(id: string) => {
               setActiveResumeId(id);
-              setCurrentView("tailoring");
+              handleNavigate("tailoring");
             }}
             onStartInterview={(interviewId: string) => {
               setActiveInterviewId(interviewId);
-              setCurrentView("interview");
+              handleNavigate("interview");
             }}
           />
         );
@@ -131,7 +155,7 @@ const Index = () => {
           <ResumeTailoring
             resumeId={activeResumeId ?? undefined}
             onStartInterview={() => {
-              setCurrentView("interview");
+              handleNavigate("interview");
             }}
           />
         );
@@ -148,7 +172,7 @@ const Index = () => {
         return (
           <Aptitude
             onProceed={() => {
-              setCurrentView("coding");
+              handleNavigate("coding");
             }}
           />
         );
@@ -163,7 +187,7 @@ const Index = () => {
         return (
           <CodingRound
             onProceed={() => {
-              setCurrentView("interview");
+              handleNavigate("interview");
             }}
           />
         );
@@ -181,19 +205,19 @@ const Index = () => {
             onComplete={(id?: string) => {
               // after interview complete, show analytics
               setActiveInterviewId(id ?? null);
-              setCurrentView("analytics");
+              handleNavigate("analytics");
             }}
           />
         );
       }
       case "schedule":
-        return <SchedulePractice onStart={() => setCurrentView("interview")} />;
+        return <SchedulePractice onStart={() => handleNavigate("interview")} />;
       case "settings":
         return <Settings />;
       case "analytics":
         return <PerformanceAnalytics />;
       case "allSessions":
-        return <AllSessions onNavigate={setCurrentView} />;
+        return <AllSessions onNavigate={handleNavigate} />;
       case "performance":
         return <PerformanceReport />;
       case "pipelines":
@@ -222,7 +246,7 @@ const Index = () => {
                   <Button
                     variant="hero"
                     size="lg"
-                    onClick={() => setCurrentView("dashboard")}
+                    onClick={() => handleNavigate("dashboard")}
                     className="h-auto p-6 flex-col gap-3 text-center"
                   >
                     <div className="text-2xl">📊</div>
@@ -237,7 +261,7 @@ const Index = () => {
                   <Button
                     variant="professional"
                     size="lg"
-                    onClick={() => setCurrentView("upload")}
+                    onClick={() => handleNavigate("upload")}
                     className="h-auto p-6 flex-col gap-3 text-center"
                   >
                     <div className="text-2xl">📄</div>
@@ -252,7 +276,7 @@ const Index = () => {
                   <Button
                     variant="professional"
                     size="lg"
-                    onClick={() => setCurrentView("tailoring")}
+                    onClick={() => handleNavigate("tailoring")}
                     className="h-auto p-6 flex-col gap-3 text-center"
                   >
                     <div className="text-2xl">✨</div>
@@ -267,7 +291,7 @@ const Index = () => {
                   <Button
                     variant="professional"
                     size="lg"
-                    onClick={() => setCurrentView("resume-pdf")}
+                    onClick={() => handleNavigate("resume-pdf")}
                     className="h-auto p-6 flex-col gap-3 text-center"
                   >
                     <div className="text-2xl">📝</div>
@@ -280,7 +304,7 @@ const Index = () => {
                   <Button
                     variant="professional"
                     size="lg"
-                    onClick={() => setCurrentView("interview")}
+                    onClick={() => handleNavigate("interview")}
                     className="h-auto p-6 flex-col gap-3 text-center"
                   >
                     <div className="text-2xl">🎥</div>
@@ -297,7 +321,7 @@ const Index = () => {
                   <Button
                     variant="premium"
                     size="lg"
-                    onClick={() => setCurrentView("analytics")}
+                    onClick={() => handleNavigate("analytics")}
                     className="px-8 py-4 text-lg"
                   >
                     <div className="text-xl mr-2">📈</div>
@@ -370,7 +394,7 @@ const Index = () => {
 
   return (
     <div className="relative">
-      <Header onNavigate={setCurrentView} />
+      <Header onNavigate={handleNavigate} />
       <div className="pt-20">{renderCurrentView()}</div>
     </div>
   );
