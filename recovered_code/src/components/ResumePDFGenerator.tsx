@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import pdfMake from "pdfmake/build/pdfmake";
 import pdfFonts from "pdfmake/build/vfs_fonts";
+import api from "@/services/api";
 
 // Initialize pdfMake with fonts
 pdfMake.vfs = pdfFonts;
@@ -74,79 +75,167 @@ const ResumePDFGenerator = ({ onNavigate }: ResumePDFGeneratorProps = {}) => {
   const [showBackConfirm, setShowBackConfirm] = useState<boolean>(false);
   const [lastApiCall, setLastApiCall] = useState<number>(0);
 
-  const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-  const MIN_API_CALL_INTERVAL = 2000; // Minimum 2 seconds between API calls
+  // Cache to prevent redundant API calls
+  const [extractionCache, setExtractionCache] = useState<
+    Map<string, ResumeData>
+  >(new Map());
+  const [optimizationCache, setOptimizationCache] = useState<
+    Map<string, ResumeData>
+  >(new Map());
+  const [lastProcessedResume, setLastProcessedResume] = useState<string>("");
+  const [lastProcessedJob, setLastProcessedJob] = useState<string>("");
+  const [userApiKey, setUserApiKey] = useState<string | null>(null);
+  const [usingUserKey, setUsingUserKey] = useState<boolean>(false);
+
+  const APP_GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+  const MIN_API_CALL_INTERVAL = 3000; // Increased to 3 seconds between API calls
+
+  // Load user's API key on component mount
+  useEffect(() => {
+    const loadUserApiKey = async () => {
+      try {
+        const response = await api.get("/users/api-keys/gemini");
+        if (response.data.success && response.data.data.apiKey) {
+          setUserApiKey(response.data.data.apiKey);
+          console.log("✓ User's Gemini API key loaded");
+        }
+      } catch (error) {
+        console.log("No user API key configured, will use app's key");
+      }
+    };
+    loadUserApiKey();
+  }, []);
 
   const showMessage = (msg: string, error: boolean = false) => {
     setMessage(msg);
     setIsError(error);
   };
 
-  const callGeminiAPI = async (payload: any, maxRetries: number = 5) => {
-    const apiKey = GEMINI_API_KEY || "";
-    const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const callGeminiAPI = async (payload: any, maxRetries: number = 3) => {
+    // Try user's key first, fallback to app's key
+    const primaryKey = userApiKey || APP_GEMINI_API_KEY;
+    const fallbackKey = userApiKey ? APP_GEMINI_API_KEY : null;
+
+    let apiKey = primaryKey;
+    let isUsingFallback = false;
 
     // Enforce minimum interval between API calls
     const now = Date.now();
     const timeSinceLastCall = now - lastApiCall;
     if (timeSinceLastCall < MIN_API_CALL_INTERVAL) {
       const waitTime = MIN_API_CALL_INTERVAL - timeSinceLastCall;
-      console.log(`Waiting ${waitTime}ms to respect rate limits...`);
+      console.log(`⏳ Waiting ${waitTime}ms to respect rate limits...`);
       await new Promise((resolve) => setTimeout(resolve, waitTime));
     }
 
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        setLastApiCall(Date.now());
-        const response = await fetch(apiUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+    // Function to try API call with a specific key
+    const tryApiCall = async (
+      key: string,
+      isFallback: boolean = false
+    ): Promise<any> => {
+      const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${key}`;
 
-        if (response.status === 429) {
-          // For rate limit errors, use longer exponential backoff
-          const baseDelay = 3000; // Start with 3 seconds
-          const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
-          console.warn(
-            `Rate limit exceeded. Retrying in ${Math.floor(
-              delay / 1000
-            )} seconds...`
-          );
-          if (attempt < maxRetries - 1) {
-            await new Promise((resolve) => setTimeout(resolve, delay));
-            continue;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          setLastApiCall(Date.now());
+          setUsingUserKey(userApiKey === key && !isFallback);
+
+          const response = await fetch(apiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          if (response.status === 429) {
+            // Rate limit - if we have fallback key and this is first attempt with user key, try fallback
+            if (!isFallback && fallbackKey && attempt === 0) {
+              console.log(
+                "⚠️ User's API key rate limited, switching to app's key..."
+              );
+              throw new Error("SWITCH_TO_FALLBACK");
+            }
+
+            // For rate limit errors, use longer exponential backoff
+            const baseDelay = 5000; // Start with 5 seconds
+            const delay =
+              baseDelay * Math.pow(2, attempt) + Math.random() * 2000;
+            console.warn(
+              `Rate limit exceeded${
+                isFallback ? " (fallback key)" : ""
+              }. Retrying in ${Math.floor(delay / 1000)} seconds...`
+            );
+            if (attempt < maxRetries - 1) {
+              await new Promise((resolve) => setTimeout(resolve, delay));
+              continue;
+            }
+            throw new Error(
+              `Gemini API rate limit exceeded${
+                isFallback ? " on both keys" : ""
+              }. Please wait a few minutes and try again.`
+            );
           }
-          throw new Error(
-            "Gemini API rate limit exceeded. Please wait a few minutes and try again, or consider upgrading your API quota."
-          );
-        }
 
-        if (!response.ok) {
-          const errorBody = await response.text();
-          throw new Error(
-            `API request failed with status ${response.status}: ${errorBody}`
-          );
-        }
+          if (!response.ok) {
+            const errorBody = await response.text();
+            // If error with user key and we have fallback, try fallback
+            if (!isFallback && fallbackKey && attempt === 0) {
+              console.log(
+                "⚠️ Error with user's key, switching to app's key..."
+              );
+              throw new Error("SWITCH_TO_FALLBACK");
+            }
+            throw new Error(
+              `API request failed with status ${response.status}: ${errorBody}`
+            );
+          }
 
-        return await response.json();
-      } catch (error) {
-        console.error(
-          `Attempt ${attempt + 1} of ${maxRetries} failed:`,
-          (error as Error).message
-        );
-        if (attempt === maxRetries - 1) {
-          throw new Error(
-            `Failed to connect to Gemini API after ${maxRetries} attempts. ${
-              (error as Error).message
-            }`
+          // Success! Log which key was used
+          if (isFallback) {
+            console.log("✓ API call succeeded using app's fallback key");
+          } else if (userApiKey) {
+            console.log("✓ API call succeeded using user's API key");
+          }
+
+          return await response.json();
+        } catch (error) {
+          const errorMsg = (error as Error).message;
+
+          // Handle switch to fallback
+          if (errorMsg === "SWITCH_TO_FALLBACK") {
+            throw error; // Re-throw to outer handler
+          }
+
+          console.error(
+            `Attempt ${attempt + 1} of ${maxRetries} failed:`,
+            errorMsg
           );
+          if (attempt === maxRetries - 1) {
+            throw new Error(
+              `Failed to connect to Gemini API after ${maxRetries} attempts. ${errorMsg}`
+            );
+          }
+          // For non-429 errors, use shorter delays
+          const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+          console.warn(`Retrying in ${Math.floor(delay / 1000)} seconds...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
-        // For non-429 errors, use shorter delays
-        const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-        console.warn(`Retrying in ${Math.floor(delay / 1000)} seconds...`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
       }
+    };
+
+    // Try primary key first
+    try {
+      return await tryApiCall(apiKey, false);
+    } catch (error) {
+      const errorMsg = (error as Error).message;
+
+      // If we should switch to fallback
+      if (errorMsg === "SWITCH_TO_FALLBACK" && fallbackKey) {
+        console.log("🔄 Attempting with fallback API key...");
+        return await tryApiCall(fallbackKey, true);
+      }
+
+      // No fallback available or fallback also failed
+      throw error;
     }
   };
 
@@ -169,6 +258,19 @@ const ResumePDFGenerator = ({ onNavigate }: ResumePDFGeneratorProps = {}) => {
   const extractResumeData = async () => {
     if (!resumeText.trim()) {
       showMessage("Please provide your resume text.", true);
+      return;
+    }
+
+    // Check if this exact resume was already processed
+    const resumeHash = resumeText.trim();
+    const cachedResult = extractionCache.get(resumeHash);
+
+    if (cachedResult && resumeHash === lastProcessedResume) {
+      setExtractedData(cachedResult);
+      showMessage(
+        "✓ Using previously extracted data (no API call needed).",
+        false
+      );
       return;
     }
 
@@ -250,6 +352,14 @@ Return ONLY the JSON object, no additional text or formatting.`;
         }
 
         const parsedData: ResumeData = JSON.parse(jsonText);
+
+        // Cache the extraction result
+        const resumeHash = resumeText.trim();
+        setExtractionCache(
+          new Map(extractionCache.set(resumeHash, parsedData))
+        );
+        setLastProcessedResume(resumeHash);
+
         setExtractedData(parsedData);
         showMessage(
           "Resume data extracted successfully! Now optimize for the job description.",
@@ -293,6 +403,21 @@ Return ONLY the JSON object, no additional text or formatting.`;
       return;
     }
 
+    // Check if this exact combination was already optimized
+    const optimizationKey = `${JSON.stringify(
+      extractedData
+    )}_${jobDescription.trim()}`;
+    const cachedResult = optimizationCache.get(optimizationKey);
+
+    if (cachedResult && jobDescription.trim() === lastProcessedJob) {
+      setOptimizedData(cachedResult);
+      showMessage(
+        "✓ Using previously optimized data (no API call needed).",
+        false
+      );
+      return;
+    }
+
     setIsProcessing(true);
     setMessage("");
     setOptimizedData(null);
@@ -330,6 +455,16 @@ Return the optimized resume data in the SAME JSON structure as the input. Only m
         }
 
         const optimized: ResumeData = JSON.parse(jsonText);
+
+        // Cache the optimization result
+        const optimizationKey = `${JSON.stringify(
+          extractedData
+        )}_${jobDescription.trim()}`;
+        setOptimizationCache(
+          new Map(optimizationCache.set(optimizationKey, optimized))
+        );
+        setLastProcessedJob(jobDescription.trim());
+
         setOptimizedData(optimized);
         showMessage(
           "Resume optimized successfully! You can now generate the PDF.",
@@ -666,6 +801,28 @@ Return the optimized resume data in the SAME JSON structure as the input. Only m
           </div>
           <div className="w-40"></div>
         </div>
+
+        {/* API Usage Info */}
+        <Alert className="mb-6 bg-blue-50 border-blue-200">
+          <AlertDescription className="text-sm text-blue-800">
+            <strong>💡 Smart Features:</strong>
+            {userApiKey ? (
+              <span className="text-green-700 font-semibold">
+                {" "}
+                Using your API key ✓
+              </span>
+            ) : (
+              <span>
+                {" "}
+                Add your own API key in Settings to avoid rate limits.
+              </span>
+            )}{" "}
+            Caching enabled - repeated operations use cached data (no API
+            calls).
+            {usingUserKey &&
+              " Your API key is being used with automatic fallback to app's key if needed."}
+          </AlertDescription>
+        </Alert>
 
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Input Section */}

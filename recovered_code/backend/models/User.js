@@ -54,6 +54,13 @@ const userSchema = new mongoose.Schema({
       publicProfile: { type: Boolean, default: false }
     }
   },
+  apiKeys: {
+    gemini: {
+      type: String,
+      default: null,
+      select: false // Don't include in queries by default for security
+    }
+  },
   stats: {
     totalInterviews: { type: Number, default: 0 },
     averageScore: { type: Number, default: 0 },
