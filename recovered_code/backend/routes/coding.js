@@ -185,7 +185,7 @@ IMPORTANT: Keep description concise, focus on clear problem statement.`;
         ],
         generationConfig: {
           temperature: 0.7,
-          maxOutputTokens: 16384,
+          maxOutputTokens: 32768,
           topP: 0.95,
           topK: 40,
         },

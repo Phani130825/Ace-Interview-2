@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Code,
   Play,
@@ -27,11 +28,8 @@ declare global {
 }
 
 // Environment variables - these will be provided in your .env file
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
+const APP_GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
-const API_URL =
-  "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=" +
-  GEMINI_API_KEY;
 
 const languageMap = {
   javascript: { id: 63, name: "JavaScript" },
@@ -76,8 +74,11 @@ const App = ({ onProceed }: CodingRoundProps) => {
   const [modalMessage, setModalMessage] = useState(null);
   const [showBackConfirm, setShowBackConfirm] = useState(false);
   const [isEditorReady, setIsEditorReady] = useState(false);
+  const [userApiKey, setUserApiKey] = useState<string | null>(null);
+  const [usingUserKey, setUsingUserKey] = useState<boolean>(false);
   const monacoEditorRef = useRef(null);
   const lastGenerationTime = useRef(0);
+  const lastApiCallTime = useRef(0);
   const lastSubmissionTime = useRef(0);
 
   // Load saved code from localStorage for current question and language
@@ -134,6 +135,23 @@ const App = ({ onProceed }: CodingRoundProps) => {
         monacoEditorRef.current.dispose();
       }
     };
+  }, []);
+
+  // Load user's Gemini API key from backend
+  useEffect(() => {
+    const loadUserApiKey = async () => {
+      try {
+        const response = await api.get("/users/api-keys/gemini");
+        if (response.data.success && response.data.data.apiKey) {
+          setUserApiKey(response.data.data.apiKey);
+          setUsingUserKey(true);
+        }
+      } catch (error) {
+        console.log("No user API key found, will use application key");
+        setUsingUserKey(false);
+      }
+    };
+    loadUserApiKey();
   }, []);
 
   // Update editor language and content when state changes
@@ -307,6 +325,105 @@ int main() {
     };
   };
 
+  // Helper function to call Gemini API with user key fallback and rate limiting
+  const callGeminiAPI = async (payload: any, retries = 3, delayMs = 5000) => {
+    // Implement rate limiting: minimum 3 seconds between API calls
+    const now = Date.now();
+    const timeSinceLastCall = now - lastApiCallTime.current;
+    if (timeSinceLastCall < 3000) {
+      const waitTime = 3000 - timeSinceLastCall;
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+    }
+    lastApiCallTime.current = Date.now();
+
+    let lastError: any = null;
+
+    // Try with user's API key first if available
+    if (userApiKey) {
+      for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+          const userApiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${userApiKey}`;
+          const response = await fetch(userApiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          if (response.ok) {
+            setUsingUserKey(true);
+            return await response.json();
+          }
+
+          if (response.status === 429) {
+            console.warn(
+              `User API key rate limited, attempt ${attempt + 1}/${retries}`
+            );
+            if (attempt < retries - 1) {
+              await new Promise((resolve) =>
+                setTimeout(resolve, delayMs * Math.pow(2, attempt))
+              );
+              continue;
+            }
+          }
+
+          lastError = new Error(
+            `User API key failed with status: ${response.status}`
+          );
+          console.warn(
+            "User API key failed, falling back to app key:",
+            lastError.message
+          );
+          break;
+        } catch (error) {
+          lastError = error;
+          console.warn("User API key error, falling back to app key:", error);
+          break;
+        }
+      }
+    }
+
+    // Fall back to application's API key
+    setUsingUserKey(false);
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const appApiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${APP_GEMINI_API_KEY}`;
+        const response = await fetch(appApiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (response.ok) {
+          return await response.json();
+        }
+
+        if (response.status === 429) {
+          console.warn(
+            `App API key rate limited, attempt ${attempt + 1}/${retries}`
+          );
+          if (attempt < retries - 1) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, delayMs * Math.pow(2, attempt))
+            );
+            continue;
+          }
+        }
+
+        throw new Error(`App API key failed with status: ${response.status}`);
+      } catch (error) {
+        lastError = error;
+        if (attempt < retries - 1) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, delayMs * Math.pow(2, attempt))
+          );
+          continue;
+        }
+      }
+    }
+
+    throw lastError || new Error("All API calls failed");
+  };
+
   const handleGenerateQuestion = async () => {
     // Rate limiting: 10 seconds between generations
     const now = Date.now();
@@ -454,110 +571,63 @@ if __name__ == "__main__":
     print(result)
 \`\`\`
 
-Make the boilerplate similarly complete for all other languages.`;
+Make the boilerplate similarly complete for all other languages.
+
+CRITICAL JSON FORMAT REQUIREMENT:
+You MUST respond with ONLY a valid JSON object following this EXACT structure. Do NOT include any markdown formatting, code blocks, or explanatory text.
+
+Required JSON Schema (all fields are MANDATORY):
+{
+  "title": "string - Problem title",
+  "functionName": "string - Name of the function to implement",
+  "description": "string - Clear problem description with examples",
+  "inputFormat": "string - Description of input format",
+  "outputFormat": "string - Description of output format",
+  "constraints": "string - Problem constraints",
+  "boilerplateCode": {
+    "javascript": {
+      "functionSignature": "string - Complete Node.js code with only core function empty",
+      "mainDriver": "string - Empty string (all code in functionSignature)"
+    },
+    "python": {
+      "functionSignature": "string - Complete Python code with only core function empty",
+      "mainDriver": "string - Empty string (all code in functionSignature)"
+    },
+    "java": {
+      "functionSignature": "string - Complete Java code with only core method empty",
+      "mainDriver": "string - Empty string (all code in functionSignature)"
+    },
+    "cpp": {
+      "functionSignature": "string - Complete C++ code with only core function empty",
+      "mainDriver": "string - Empty string (all code in functionSignature)"
+    }
+  },
+  "sampleTestCases": [
+    { "input": "string", "output": "string" },
+    { "input": "string", "output": "string" },
+    { "input": "string", "output": "string" }
+  ],
+  "hiddenTestCases": [
+    { "input": "string", "output": "string" },
+    { "input": "string", "output": "string" },
+    { "input": "string", "output": "string" },
+    { "input": "string", "output": "string" },
+    { "input": "string", "output": "string" }
+  ]
+}
+
+RESPOND WITH ONLY THE JSON OBJECT - NO EXPLANATIONS, NO MARKDOWN, NO CODE BLOCKS.`;
+
+    const combinedPrompt = `${systemPrompt}\n\n${userQuery}`;
 
     const payload = {
-      contents: [{ parts: [{ text: userQuery }] }],
+      contents: [{ parts: [{ text: combinedPrompt }] }],
       generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "OBJECT",
-          properties: {
-            title: { type: "STRING" },
-            functionName: { type: "STRING" },
-            description: { type: "STRING" },
-            inputFormat: { type: "STRING" },
-            outputFormat: { type: "STRING" },
-            constraints: { type: "STRING" },
-            boilerplateCode: {
-              type: "OBJECT",
-              properties: {
-                javascript: {
-                  type: "OBJECT",
-                  properties: {
-                    functionSignature: {
-                      type: "STRING",
-                      description:
-                        "Complete code with only core function empty",
-                    },
-                    mainDriver: {
-                      type: "STRING",
-                      description:
-                        "Empty string as all code is in functionSignature",
-                    },
-                  },
-                },
-                python: {
-                  type: "OBJECT",
-                  properties: {
-                    functionSignature: {
-                      type: "STRING",
-                      description:
-                        "Complete code with only core function empty",
-                    },
-                    mainDriver: {
-                      type: "STRING",
-                      description:
-                        "Empty string as all code is in functionSignature",
-                    },
-                  },
-                },
-                java: {
-                  type: "OBJECT",
-                  properties: {
-                    functionSignature: {
-                      type: "STRING",
-                      description:
-                        "Complete code with only core method in Solution class empty",
-                    },
-                    mainDriver: {
-                      type: "STRING",
-                      description:
-                        "Empty string as all code is in functionSignature",
-                    },
-                  },
-                },
-                cpp: {
-                  type: "OBJECT",
-                  properties: {
-                    functionSignature: {
-                      type: "STRING",
-                      description:
-                        "Complete code with only core function empty",
-                    },
-                    mainDriver: {
-                      type: "STRING",
-                      description:
-                        "Empty string as all code is in functionSignature",
-                    },
-                  },
-                },
-              },
-            },
-            sampleTestCases: {
-              type: "ARRAY",
-              items: {
-                type: "OBJECT",
-                properties: {
-                  input: { type: "STRING" },
-                  output: { type: "STRING" },
-                },
-              },
-            },
-            hiddenTestCases: {
-              type: "ARRAY",
-              items: {
-                type: "OBJECT",
-                properties: {
-                  input: { type: "STRING" },
-                  output: { type: "STRING" },
-                },
-              },
-            },
-          },
-        },
+        temperature: 0.7,
+        maxOutputTokens: 32768,
+        topP: 0.95,
+        topK: 40,
       },
-      systemInstruction: { parts: [{ text: systemPrompt }] },
     };
 
     try {
@@ -598,21 +668,12 @@ Make the boilerplate similarly complete for all other languages.`;
 
       // Fallback to direct Gemini call if backend failed or didn't return a question
       if (!generatedQuestion) {
-        console.log("Trying direct Gemini API call...");
-        const response = await fetch(API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          throw new Error(
-            `Gemini API call failed with status: ${response.status}`
-          );
-        }
-
-        const data = await response.json();
+        console.log(
+          "Trying direct Gemini API call with user/app key fallback..."
+        );
+        const data = await callGeminiAPI(payload);
         const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        const finishReason = data?.candidates?.[0]?.finishReason;
 
         if (!textContent) {
           throw new Error(
@@ -620,10 +681,34 @@ Make the boilerplate similarly complete for all other languages.`;
           );
         }
 
+        // Check if response was truncated due to token limit
+        if (finishReason === "MAX_TOKENS") {
+          console.warn("⚠️ Response may be truncated due to token limit");
+          throw new Error(
+            "Response was truncated. The question may be incomplete. Please try again."
+          );
+        }
+
         try {
-          generatedQuestion = JSON.parse(textContent);
+          // Clean the response to extract JSON
+          let jsonText = textContent.trim();
+
+          // Remove markdown code blocks if present
+          if (jsonText.startsWith("```json")) {
+            jsonText = jsonText
+              .replace(/```json\s*/, "")
+              .replace(/\s*```$/, "");
+          } else if (jsonText.startsWith("```")) {
+            jsonText = jsonText.replace(/```\s*/, "").replace(/\s*```$/, "");
+          }
+
+          generatedQuestion = JSON.parse(jsonText);
         } catch (e) {
-          throw new Error("Gemini response was not valid JSON: " + textContent);
+          console.error("Failed to parse Gemini response:", e);
+          console.error("Raw response:", textContent.substring(0, 500));
+          throw new Error(
+            "Gemini response was not valid JSON. Please try again."
+          );
         }
       }
 
@@ -634,6 +719,60 @@ Make the boilerplate similarly complete for all other languages.`;
         );
       }
 
+      // Validate required fields
+      const requiredFields = [
+        "title",
+        "functionName",
+        "description",
+        "inputFormat",
+        "outputFormat",
+        "constraints",
+        "boilerplateCode",
+        "sampleTestCases",
+        "hiddenTestCases",
+      ];
+
+      const missingFields = requiredFields.filter(
+        (field) => !generatedQuestion[field]
+      );
+      if (missingFields.length > 0) {
+        throw new Error(
+          `Generated question is missing required fields: ${missingFields.join(
+            ", "
+          )}`
+        );
+      }
+
+      // Validate boilerplateCode structure
+      const requiredLanguages = ["javascript", "python", "java", "cpp"];
+      const missingLanguages = requiredLanguages.filter(
+        (lang) =>
+          !generatedQuestion.boilerplateCode[lang] ||
+          !generatedQuestion.boilerplateCode[lang].functionSignature
+      );
+      if (missingLanguages.length > 0) {
+        throw new Error(
+          `Boilerplate code missing for languages: ${missingLanguages.join(
+            ", "
+          )}`
+        );
+      }
+
+      // Validate test cases
+      if (
+        !Array.isArray(generatedQuestion.sampleTestCases) ||
+        generatedQuestion.sampleTestCases.length < 3
+      ) {
+        throw new Error("Must have at least 3 sample test cases");
+      }
+      if (
+        !Array.isArray(generatedQuestion.hiddenTestCases) ||
+        generatedQuestion.hiddenTestCases.length < 5
+      ) {
+        throw new Error("Must have at least 5 hidden test cases");
+      }
+
+      console.log("✓ Question validation passed");
       setQuestion(generatedQuestion);
       if (isEditorReady && monacoEditorRef.current) {
         const boilerplate =
@@ -958,6 +1097,44 @@ Make the boilerplate similarly complete for all other languages.`;
       )}
 
       <div className="max-w-7xl mx-auto">
+        {/* API Key Usage Banner */}
+        {userApiKey && (
+          <Alert className="mb-4 bg-green-900 border-green-700">
+            <AlertDescription className="text-green-100">
+              🔑 Using your personal Gemini API key for question generation.{" "}
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.location.href = "/?page=settings";
+                }}
+                className="underline hover:text-green-200"
+              >
+                Manage API keys
+              </a>
+            </AlertDescription>
+          </Alert>
+        )}
+        {!userApiKey && (
+          <Alert className="mb-4 bg-blue-900 border-blue-700">
+            <AlertDescription className="text-blue-100">
+              ℹ️ Using application's Gemini API key. To avoid rate limiting, add
+              your own API key in{" "}
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.location.href = "/?page=settings";
+                }}
+                className="underline hover:text-blue-200"
+              >
+                Settings
+              </a>
+              .
+            </AlertDescription>
+          </Alert>
+        )}
+
         <header className="flex flex-col sm:flex-row justify-between items-center mb-6">
           <div className="flex items-center gap-4">
             <button
