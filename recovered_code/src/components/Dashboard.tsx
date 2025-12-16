@@ -11,8 +11,13 @@ import {
   Target,
   FileText,
   Video,
+  Briefcase,
+  ExternalLink,
+  MapPin,
+  Star,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import api from "@/services/api";
 import {
   getInterviewSessions,
   getAptitudeTests,
@@ -53,6 +58,61 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
     confidenceLevel: 0,
     technicalKnowledge: 0,
   });
+  const [jobAlerts, setJobAlerts] = useState<any[]>([]);
+  const [dreamCompanyJobs, setDreamCompanyJobs] = useState<any[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [dreamJobsLoading, setDreamJobsLoading] = useState(false);
+  const [lastJobFetch, setLastJobFetch] = useState<number>(0);
+
+  // Load job alerts with rate limiting
+  useEffect(() => {
+    const loadJobAlerts = async () => {
+      if (!user) return;
+
+      // Rate limit: Don't fetch if last fetch was less than 10 minutes ago
+      const now = Date.now();
+      if (lastJobFetch && now - lastJobFetch < 10 * 60 * 1000) {
+        console.log("Job alerts cached, skipping fetch");
+        return;
+      }
+
+      setJobsLoading(true);
+      try {
+        const response = await api.get("/users/jobs");
+        if (response.data.success) {
+          setJobAlerts(response.data.data.jobs || []);
+          setLastJobFetch(now);
+        }
+      } catch (error) {
+        console.error("Failed to load job alerts:", error);
+      } finally {
+        setJobsLoading(false);
+      }
+    };
+
+    loadJobAlerts();
+  }, [user]);
+
+  // Load dream company jobs
+  useEffect(() => {
+    const loadDreamCompanyJobs = async () => {
+      if (!user) return;
+
+      setDreamJobsLoading(true);
+      try {
+        const response = await api.get("/users/jobs/dream-companies");
+        if (response.data.success) {
+          setDreamCompanyJobs(response.data.data.jobs || []);
+        }
+      } catch (error) {
+        console.error("Failed to load dream company jobs:", error);
+      } finally {
+        setDreamJobsLoading(false);
+      }
+    };
+
+    loadDreamCompanyJobs();
+  }, [user]);
 
   // Load real-time data
   useEffect(() => {
@@ -479,6 +539,179 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
 
           {/* Sidebar */}
           <div className="space-y-6">
+            {/* Recent Job Alerts */}
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                  <Briefcase className="h-5 w-5 text-blue-600" />
+                  Recent Job Alerts
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onNavigate("settings")}
+                  className="text-xs"
+                >
+                  Edit Preferences
+                </Button>
+              </div>
+
+              {jobsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Clock className="h-6 w-6 animate-spin text-blue-600" />
+                </div>
+              ) : jobAlerts.length > 0 ? (
+                <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                  {jobAlerts.slice(0, 5).map((job, index) => (
+                    <div
+                      key={index}
+                      className="p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-100 hover:shadow-md transition-shadow"
+                    >
+                      <h4 className="font-semibold text-sm text-gray-900 mb-1">
+                        {job.title}
+                      </h4>
+                      <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
+                        <span className="font-medium">{job.company}</span>
+                        {job.location && (
+                          <>
+                            <span>•</span>
+                            <div className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              <span>{job.location}</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      {job.snippet && (
+                        <p className="text-xs text-gray-600 mb-2 line-clamp-2">
+                          {job.snippet}
+                        </p>
+                      )}
+                      {job.salary && (
+                        <p className="text-xs font-semibold text-green-600 mb-2">
+                          {job.salary}
+                        </p>
+                      )}
+                      <a
+                        href={job.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        View Job
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Briefcase className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm text-gray-600 mb-2">
+                    No job alerts yet
+                  </p>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Add your job preferences in Settings to see personalized job
+                    recommendations
+                  </p>
+                  <Button size="sm" onClick={() => onNavigate("settings")}>
+                    Add Preferences
+                  </Button>
+                </div>
+              )}
+            </Card>
+
+            {/* Dream Company Jobs */}
+            <Card className="p-6 border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-pink-50">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                  <Star className="h-5 w-5 text-purple-600 fill-purple-600" />
+                  Dream Company Jobs
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onNavigate("settings")}
+                  className="text-xs"
+                >
+                  Edit Companies
+                </Button>
+              </div>
+
+              {dreamJobsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Clock className="h-6 w-6 animate-spin text-purple-600" />
+                </div>
+              ) : dreamCompanyJobs.length > 0 ? (
+                <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                  {dreamCompanyJobs.slice(0, 5).map((job, index) => (
+                    <div
+                      key={index}
+                      className="p-3 bg-white rounded-lg border-2 border-purple-200 hover:shadow-lg hover:border-purple-300 transition-all"
+                    >
+                      <div className="flex items-start justify-between mb-1">
+                        <h4 className="font-semibold text-sm text-gray-900 flex-1">
+                          {job.title}
+                        </h4>
+                        <Star className="h-4 w-4 text-purple-600 fill-purple-600 flex-shrink-0 ml-2" />
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
+                        <span className="font-bold text-purple-700">
+                          {job.company}
+                        </span>
+                        {job.location && (
+                          <>
+                            <span>•</span>
+                            <div className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              <span>{job.location}</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      {job.snippet && (
+                        <p className="text-xs text-gray-600 mb-2 line-clamp-2">
+                          {job.snippet}
+                        </p>
+                      )}
+                      {job.salary && (
+                        <p className="text-xs font-semibold text-green-600 mb-2">
+                          {job.salary}
+                        </p>
+                      )}
+                      <a
+                        href={job.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 font-medium"
+                      >
+                        View Job
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Star className="h-12 w-12 text-purple-300 mx-auto mb-3" />
+                  <p className="text-sm text-gray-600 mb-2">
+                    No dream company jobs found
+                  </p>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Add your dream companies in Settings to see exclusive
+                    opportunities
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={() => onNavigate("settings")}
+                    className="bg-purple-600 hover:bg-purple-700"
+                  >
+                    Add Dream Companies
+                  </Button>
+                </div>
+              )}
+            </Card>
+
             {/* Recent Sessions */}
             <Card className="p-6">
               <h3 className="font-bold text-gray-900 mb-4">Recent Sessions</h3>

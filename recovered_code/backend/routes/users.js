@@ -5,6 +5,11 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 
 const router = express.Router();
 
+// Job cache to prevent excessive API calls
+// Cache structure: { userId: { jobs: [], dreamCompanyJobs: [], timestamp: Date } }
+const jobCache = new Map();
+const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+
 // @route   GET /api/users/profile
 // @desc    Get user profile
 // @access  Private
@@ -261,6 +266,288 @@ router.delete('/api-keys/gemini', asyncHandler(async (req, res) => {
     success: true,
     message: 'Gemini API key removed successfully'
   });
+}));
+
+// @route   PUT /api/users/job-preferences
+// @desc    Update user's job preferences
+// @access  Private
+router.put('/job-preferences', asyncHandler(async (req, res) => {
+  const { jobPreferences } = req.body;
+  
+  const user = await User.findById(req.user._id);
+  user.jobPreferences = jobPreferences;
+  await user.save();
+
+  res.json({
+    success: true,
+    message: 'Job preferences updated successfully',
+    data: {
+      jobPreferences: user.jobPreferences
+    }
+  });
+}));
+
+// Helper function to fetch jobs from Jooble API
+const fetchJobsFromJooble = async (prefs, joobleApiKey) => {
+  const keywords = [...prefs.rolesOfInterest];
+  if (prefs.skills && prefs.skills.length > 0) {
+    keywords.push(...prefs.skills.slice(0, 2));
+  }
+
+  const searchQuery = {
+    keywords: keywords.join(' OR '),
+    location: [prefs.location?.city, prefs.location?.country]
+      .filter(Boolean)
+      .join(', ') || 'Remote',
+    page: 1
+  };
+
+  const response = await fetch(`https://jooble.org/api/${joobleApiKey}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(searchQuery)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Jooble API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.jobs || [];
+};
+
+// @route   GET /api/users/jobs
+// @desc    Fetch personalized job recommendations from Jooble API (with caching)
+// @access  Private
+router.get('/jobs', asyncHandler(async (req, res) => {
+  const userId = req.user._id.toString();
+  const user = await User.findById(req.user._id);
+  const prefs = user.jobPreferences || {};
+  
+  // If user has no preferences, return empty
+  if (!prefs.rolesOfInterest || prefs.rolesOfInterest.length === 0) {
+    return res.json({
+      success: true,
+      data: {
+        jobs: [],
+        message: 'Please add job preferences in Settings to see job recommendations'
+      }
+    });
+  }
+
+  // Check cache first
+  const cachedData = jobCache.get(userId);
+  const now = Date.now();
+  
+  if (cachedData && (now - cachedData.timestamp) < CACHE_DURATION) {
+    console.log('Returning cached jobs for user:', userId);
+    return res.json({
+      success: true,
+      data: {
+        jobs: cachedData.jobs,
+        totalJobs: cachedData.totalJobs,
+        cached: true,
+        cacheExpiresIn: Math.round((CACHE_DURATION - (now - cachedData.timestamp)) / 1000)
+      }
+    });
+  }
+
+  try {
+    const joobleApiKey = process.env.JOOBLE_API_KEY;
+    if (!joobleApiKey) {
+      throw new Error('Jooble API key not configured');
+    }
+
+    // Fetch jobs from Jooble API
+    const allJobs = await fetchJobsFromJooble(prefs, joobleApiKey);
+    
+    // Separate jobs into dream company and regular jobs
+    let dreamCompanyJobs = [];
+    let regularJobs = [];
+    
+    if (prefs.dreamCompanies && prefs.dreamCompanies.length > 0) {
+      const dreamCompanyLower = prefs.dreamCompanies.map(c => c.toLowerCase());
+      
+      dreamCompanyJobs = allJobs.filter(job => 
+        dreamCompanyLower.some(company => 
+          job.company.toLowerCase().includes(company)
+        )
+      );
+      
+      regularJobs = allJobs.filter(job => 
+        !dreamCompanyLower.some(company => 
+          job.company.toLowerCase().includes(company)
+        )
+      );
+    } else {
+      regularJobs = allJobs;
+    }
+
+    // Prioritize dream company jobs, then add regular jobs
+    const jobs = [...dreamCompanyJobs, ...regularJobs].slice(0, 10);
+
+    const formattedJobs = jobs.map(job => ({
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      snippet: job.snippet,
+      salary: job.salary,
+      type: job.type,
+      link: job.link,
+      updated: job.updated
+    }));
+
+    const formattedDreamJobs = dreamCompanyJobs.slice(0, 10).map(job => ({
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      snippet: job.snippet,
+      salary: job.salary,
+      type: job.type,
+      link: job.link,
+      updated: job.updated
+    }));
+
+    // Cache the results
+    jobCache.set(userId, {
+      jobs: formattedJobs,
+      dreamCompanyJobs: formattedDreamJobs,
+      totalJobs: allJobs.length,
+      timestamp: now
+    });
+
+    res.json({
+      success: true,
+      data: {
+        jobs: formattedJobs,
+        totalJobs: allJobs.length,
+        cached: false
+      }
+    });
+  } catch (error) {
+    console.error('Jooble API error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch job recommendations. Please try again later.'
+    });
+  }
+}));
+
+// @route   GET /api/users/jobs/dream-companies
+// @desc    Fetch jobs ONLY from dream companies (with caching)
+// @access  Private
+router.get('/jobs/dream-companies', asyncHandler(async (req, res) => {
+  const userId = req.user._id.toString();
+  const user = await User.findById(req.user._id);
+  const prefs = user.jobPreferences || {};
+  
+  // If user has no dream companies, return empty
+  if (!prefs.dreamCompanies || prefs.dreamCompanies.length === 0) {
+    return res.json({
+      success: true,
+      data: {
+        jobs: [],
+        message: 'Please add dream companies in Settings to see these job recommendations'
+      }
+    });
+  }
+
+  if (!prefs.rolesOfInterest || prefs.rolesOfInterest.length === 0) {
+    return res.json({
+      success: true,
+      data: {
+        jobs: [],
+        message: 'Please add roles of interest in Settings'
+      }
+    });
+  }
+
+  // Check cache first
+  const cachedData = jobCache.get(userId);
+  const now = Date.now();
+  
+  if (cachedData && (now - cachedData.timestamp) < CACHE_DURATION) {
+    console.log('Returning cached dream company jobs for user:', userId);
+    return res.json({
+      success: true,
+      data: {
+        jobs: cachedData.dreamCompanyJobs,
+        cached: true,
+        cacheExpiresIn: Math.round((CACHE_DURATION - (now - cachedData.timestamp)) / 1000)
+      }
+    });
+  }
+
+  try {
+    const joobleApiKey = process.env.JOOBLE_API_KEY;
+    if (!joobleApiKey) {
+      throw new Error('Jooble API key not configured');
+    }
+
+    // Fetch jobs from Jooble API
+    const allJobs = await fetchJobsFromJooble(prefs, joobleApiKey);
+    
+    // Filter ONLY dream company jobs
+    const dreamCompanyLower = prefs.dreamCompanies.map(c => c.toLowerCase());
+    const dreamCompanyJobs = allJobs.filter(job => 
+      dreamCompanyLower.some(company => 
+        job.company.toLowerCase().includes(company)
+      )
+    ).slice(0, 10);
+
+    const formattedDreamJobs = dreamCompanyJobs.map(job => ({
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      snippet: job.snippet,
+      salary: job.salary,
+      type: job.type,
+      link: job.link,
+      updated: job.updated
+    }));
+
+    // Update cache if not exists (jobs endpoint will also populate this)
+    if (!cachedData) {
+      const regularJobs = allJobs.filter(job => 
+        !dreamCompanyLower.some(company => 
+          job.company.toLowerCase().includes(company)
+        )
+      );
+      const mixedJobs = [...dreamCompanyJobs, ...regularJobs].slice(0, 10).map(job => ({
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        snippet: job.snippet,
+        salary: job.salary,
+        type: job.type,
+        link: job.link,
+        updated: job.updated
+      }));
+
+      jobCache.set(userId, {
+        jobs: mixedJobs,
+        dreamCompanyJobs: formattedDreamJobs,
+        totalJobs: allJobs.length,
+        timestamp: now
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        jobs: formattedDreamJobs,
+        cached: false
+      }
+    });
+  } catch (error) {
+    console.error('Jooble API error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch dream company jobs. Please try again later.'
+    });
+  }
 }));
 
 export default router;

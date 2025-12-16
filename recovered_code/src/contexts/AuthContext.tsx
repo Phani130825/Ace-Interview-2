@@ -34,7 +34,8 @@ interface AuthContextType {
     firstName: string,
     lastName: string,
     email: string,
-    password: string
+    password: string,
+    jobPreferences?: any
   ) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -131,7 +132,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     firstName: string,
     lastName: string,
     email: string,
-    password: string
+    password: string,
+    jobPreferences?: any
   ) => {
     try {
       const response = await authAPI.register({
@@ -139,6 +141,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         lastName,
         email,
         password,
+        jobPreferences,
       });
       const { token, refreshToken, user } = response.data.data;
       localStorage.setItem("token", token);

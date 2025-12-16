@@ -25,9 +25,74 @@ const Settings = () => {
   const [hasExistingKey, setHasExistingKey] = useState(false);
   const [maskedKey, setMaskedKey] = useState("");
 
+  // Profile editing
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileMessage, setProfileMessage] = useState("");
+  const [isProfileError, setIsProfileError] = useState(false);
+  const [isProfileSaving, setIsProfileSaving] = useState(false);
+
+  // Job preferences
+  const [rolesOfInterest, setRolesOfInterest] = useState<string[]>([]);
+  const [dreamCompanies, setDreamCompanies] = useState<string[]>([]);
+  const [skills, setSkills] = useState<string[]>([]);
+  const [city, setCity] = useState("");
+  const [country, setCountry] = useState("");
+  const [experienceLevel, setExperienceLevel] = useState("");
+  const [jobType, setJobType] = useState("");
+
   useEffect(() => {
     loadApiKey();
+    loadProfile();
   }, []);
+
+  const loadProfile = async () => {
+    try {
+      const response = await api.get("/users/profile");
+      if (response.data.success) {
+        const prefs = response.data.data.user.jobPreferences || {};
+        setRolesOfInterest(prefs.rolesOfInterest || []);
+        setDreamCompanies(prefs.dreamCompanies || []);
+        setSkills(prefs.skills || []);
+        setCity(prefs.location?.city || "");
+        setCountry(prefs.location?.country || "");
+        setExperienceLevel(prefs.experienceLevel || "");
+        setJobType(prefs.jobType || "");
+      }
+    } catch (error) {
+      console.error("Failed to load profile:", error);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    setIsProfileSaving(true);
+    setProfileMessage("");
+
+    try {
+      const response = await api.put("/users/job-preferences", {
+        jobPreferences: {
+          rolesOfInterest,
+          dreamCompanies,
+          skills,
+          location: { city, country },
+          experienceLevel,
+          jobType,
+        },
+      });
+
+      if (response.data.success) {
+        setProfileMessage("✓ Job preferences saved successfully!");
+        setIsProfileError(false);
+        setIsEditingProfile(false);
+      }
+    } catch (error: any) {
+      setProfileMessage(
+        error.response?.data?.error || "Failed to save preferences"
+      );
+      setIsProfileError(true);
+    } finally {
+      setIsProfileSaving(false);
+    }
+  };
 
   const loadApiKey = async () => {
     setIsLoading(true);
@@ -250,31 +315,244 @@ const Settings = () => {
             </CardContent>
           </Card>
 
-          {/* Account Settings */}
+          {/* Job Preferences */}
           <Card>
             <CardHeader>
-              <CardTitle>Account Settings</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                <span>Job Preferences</span>
+                {!isEditingProfile && (
+                  <Button
+                    onClick={() => setIsEditingProfile(true)}
+                    variant="outline"
+                    size="sm"
+                  >
+                    Edit Profile
+                  </Button>
+                )}
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="p-4 border rounded-xl">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-gradient-to-r from-brand-primary to-brand-secondary rounded-xl text-white">
-                      <SettingsIcon className="h-6 w-6" />
+              <Alert className="mb-4 bg-blue-50 border-blue-200">
+                <AlertDescription className="text-sm text-blue-800">
+                  <strong>💼 Job Alerts:</strong> Add your job preferences to
+                  receive personalized job recommendations in your dashboard.
+                </AlertDescription>
+              </Alert>
+
+              {profileMessage && (
+                <Alert
+                  className={`mb-4 ${
+                    isProfileError
+                      ? "bg-red-50 border-red-200"
+                      : "bg-green-50 border-green-200"
+                  }`}
+                >
+                  <AlertDescription
+                    className={`text-sm ${
+                      isProfileError ? "text-red-800" : "text-green-800"
+                    }`}
+                  >
+                    {profileMessage}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {isEditingProfile ? (
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="roles">Roles of Interest</Label>
+                    <Input
+                      id="roles"
+                      value={rolesOfInterest.join(", ")}
+                      onChange={(e) =>
+                        setRolesOfInterest(
+                          e.target.value.split(",").map((r) => r.trim())
+                        )
+                      }
+                      placeholder="e.g. Software Engineer, Data Scientist"
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Separate multiple roles with commas
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="companies">Dream Companies</Label>
+                    <Input
+                      id="companies"
+                      value={dreamCompanies.join(", ")}
+                      onChange={(e) =>
+                        setDreamCompanies(
+                          e.target.value.split(",").map((c) => c.trim())
+                        )
+                      }
+                      placeholder="e.g. Google, Microsoft, Amazon"
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Separate multiple companies with commas
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="skills-edit">Skills</Label>
+                    <Input
+                      id="skills-edit"
+                      value={skills.join(", ")}
+                      onChange={(e) =>
+                        setSkills(
+                          e.target.value.split(",").map((s) => s.trim())
+                        )
+                      }
+                      placeholder="e.g. React, Python, AWS"
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Separate multiple skills with commas
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="city-edit">City</Label>
+                      <Input
+                        id="city-edit"
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        placeholder="e.g. San Francisco"
+                        className="mt-1"
+                      />
                     </div>
                     <div>
-                      <div className="font-semibold">Profile & Preferences</div>
-                      <div className="text-sm text-gray-500">
-                        Update your display name, notification preferences and
-                        more.
-                      </div>
+                      <Label htmlFor="country-edit">Country</Label>
+                      <Input
+                        id="country-edit"
+                        value={country}
+                        onChange={(e) => setCountry(e.target.value)}
+                        placeholder="e.g. USA"
+                        className="mt-1"
+                      />
                     </div>
                   </div>
-                  <div className="mt-4">
-                    <Button variant="default">Edit Profile</Button>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="exp-level">Experience Level</Label>
+                      <select
+                        id="exp-level"
+                        value={experienceLevel}
+                        onChange={(e) => setExperienceLevel(e.target.value)}
+                        className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select level</option>
+                        <option value="entry">Entry Level</option>
+                        <option value="mid">Mid Level</option>
+                        <option value="senior">Senior Level</option>
+                        <option value="lead">Lead/Principal</option>
+                      </select>
+                    </div>
+                    <div>
+                      <Label htmlFor="job-type-edit">Job Type</Label>
+                      <select
+                        id="job-type-edit"
+                        value={jobType}
+                        onChange={(e) => setJobType(e.target.value)}
+                        className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select type</option>
+                        <option value="full-time">Full Time</option>
+                        <option value="part-time">Part Time</option>
+                        <option value="contract">Contract</option>
+                        <option value="internship">Internship</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => {
+                        setIsEditingProfile(false);
+                        loadProfile();
+                      }}
+                      variant="outline"
+                      disabled={isProfileSaving}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleSaveProfile}
+                      disabled={isProfileSaving}
+                    >
+                      {isProfileSaving ? (
+                        <>
+                          <Loader className="h-4 w-4 mr-2 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        "Save Preferences"
+                      )}
+                    </Button>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-3">
+                  {rolesOfInterest.length > 0 && (
+                    <div>
+                      <span className="font-semibold text-sm">Roles:</span>
+                      <p className="text-gray-700">
+                        {rolesOfInterest.join(", ")}
+                      </p>
+                    </div>
+                  )}
+                  {dreamCompanies.length > 0 && (
+                    <div>
+                      <span className="font-semibold text-sm">Companies:</span>
+                      <p className="text-gray-700">
+                        {dreamCompanies.join(", ")}
+                      </p>
+                    </div>
+                  )}
+                  {skills.length > 0 && (
+                    <div>
+                      <span className="font-semibold text-sm">Skills:</span>
+                      <p className="text-gray-700">{skills.join(", ")}</p>
+                    </div>
+                  )}
+                  {(city || country) && (
+                    <div>
+                      <span className="font-semibold text-sm">Location:</span>
+                      <p className="text-gray-700">
+                        {[city, country].filter(Boolean).join(", ")}
+                      </p>
+                    </div>
+                  )}
+                  {experienceLevel && (
+                    <div>
+                      <span className="font-semibold text-sm">Experience:</span>
+                      <p className="text-gray-700 capitalize">
+                        {experienceLevel} Level
+                      </p>
+                    </div>
+                  )}
+                  {jobType && (
+                    <div>
+                      <span className="font-semibold text-sm">Job Type:</span>
+                      <p className="text-gray-700 capitalize">
+                        {jobType.replace("-", " ")}
+                      </p>
+                    </div>
+                  )}
+                  {rolesOfInterest.length === 0 &&
+                    dreamCompanies.length === 0 &&
+                    skills.length === 0 && (
+                      <p className="text-gray-500 italic">
+                        No job preferences set. Click "Edit Profile" to add your
+                        preferences.
+                      </p>
+                    )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

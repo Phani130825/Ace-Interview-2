@@ -17,7 +17,7 @@ router.post('/register', asyncHandler(async (req, res) => {
     userAgent: req.get('User-Agent')
   });
 
-  const { email, password, firstName, lastName } = req.body;
+  const { email, password, firstName, lastName, jobPreferences } = req.body;
 
   // Validation with detailed error messages
   const missingFields = [];
@@ -44,13 +44,20 @@ router.post('/register', asyncHandler(async (req, res) => {
     });
   }
 
-  // Create new user
-  const user = new User({
+  // Create new user with job preferences
+  const userData = {
     email,
     password,
     firstName,
     lastName
-  });
+  };
+
+  // Add job preferences if provided
+  if (jobPreferences) {
+    userData.jobPreferences = jobPreferences;
+  }
+
+  const user = new User(userData);
 
   try {
     await user.save();

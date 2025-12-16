@@ -61,6 +61,42 @@ const userSchema = new mongoose.Schema({
       select: false // Don't include in queries by default for security
     }
   },
+  jobPreferences: {
+    rolesOfInterest: [{
+      type: String,
+      trim: true
+    }],
+    dreamCompanies: [{
+      type: String,
+      trim: true
+    }],
+    skills: [{
+      type: String,
+      trim: true
+    }],
+    location: {
+      city: {
+        type: String,
+        trim: true,
+        default: ''
+      },
+      country: {
+        type: String,
+        trim: true,
+        default: ''
+      }
+    },
+    experienceLevel: {
+      type: String,
+      enum: ['entry', 'mid', 'senior', 'lead', ''],
+      default: ''
+    },
+    jobType: {
+      type: String,
+      enum: ['full-time', 'part-time', 'contract', 'internship', ''],
+      default: ''
+    }
+  },
   stats: {
     totalInterviews: { type: Number, default: 0 },
     averageScore: { type: Number, default: 0 },
