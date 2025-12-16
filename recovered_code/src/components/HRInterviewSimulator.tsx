@@ -13,9 +13,9 @@ import {
   saveInterviewSession,
   updateInterviewSession,
 } from "@/services/testStorage";
+import { generateContent } from "@/services/geminiService";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 
 type LogEntry = {
   speaker:
@@ -232,25 +232,20 @@ Introduce yourself as Jennifer Hayes and ask your first HR-focused question. Foc
 
 Start with a welcoming introduction and your first question.`;
 
-      const initialChatHistory = [
-        { role: "user", parts: [{ text: introPrompt }] },
-      ];
-      const payload = { contents: initialChatHistory };
-      const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      // Use backend proxy for secure API calls
+      const result = await generateContent({
+        prompt: introPrompt,
+        model: "gemini-2.5-flash",
+        maxOutputTokens: 8192,
+        temperature: 0.7,
       });
 
-      if (!response.ok) {
-        throw new Error(`Gemini API Error: ${response.status}`);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to generate interview content");
       }
 
-      const result = await response.json();
       const text =
-        result?.candidates?.[0]?.content?.parts?.[0]?.text ||
+        result.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
         "I could not generate a response. Please try again.";
 
       const initialLog: LogEntry[] = [
@@ -274,7 +269,7 @@ Start with a welcoming introduction and your first question.`;
       setInterviewLog(initialLog);
       setInterviewState("in-progress");
       setChatHistory([
-        ...initialChatHistory,
+        { role: "user", parts: [{ text: introPrompt }] },
         { role: "model", parts: [{ text: text }] },
       ]);
       setQuestionCount(1);
@@ -365,22 +360,17 @@ As Jennifer Hayes, acknowledge their thanks professionally and provide HR-focuse
 5. Opportunities for growth
 6. Overall impression and next steps`;
 
-        const feedbackPayload = {
-          contents: [{ role: "user", parts: [{ text: feedbackPrompt }] }],
-        };
-        const feedbackResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(feedbackPayload),
-          }
-        );
+        // Use backend proxy for secure API calls
+        const feedbackResult = await generateContent({
+          prompt: feedbackPrompt,
+          model: "gemini-2.5-flash",
+          maxOutputTokens: 8192,
+          temperature: 0.7,
+        });
 
-        if (feedbackResponse.ok) {
-          const feedbackResult = await feedbackResponse.json();
+        if (feedbackResult.success) {
           const feedbackText =
-            feedbackResult?.candidates?.[0]?.content?.parts?.[0]?.text ||
+            feedbackResult.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
             "Thank you for your time. We appreciate your interest and wish you the best!";
 
           const feedbackLogEntry: LogEntry = {
@@ -473,25 +463,22 @@ Provide detailed feedback as Jennifer Hayes covering:
 8. Development areas with specific, actionable advice
 9. Overall recommendation for the HR role`;
 
-        const feedbackPayload = {
-          contents: [{ role: "user", parts: [{ text: feedbackPrompt }] }],
-        };
-        const feedbackResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(feedbackPayload),
-          }
-        );
+        // Use backend proxy for secure API calls
+        const feedbackResult = await generateContent({
+          prompt: feedbackPrompt,
+          model: "gemini-2.5-flash",
+          maxOutputTokens: 8192,
+          temperature: 0.7,
+        });
 
-        if (!feedbackResponse.ok) {
-          throw new Error(`Gemini API Error: ${feedbackResponse.status}`);
+        if (!feedbackResult.success) {
+          throw new Error(
+            feedbackResult.error || "Failed to generate feedback"
+          );
         }
 
-        const feedbackResult = await feedbackResponse.json();
         const feedbackText =
-          feedbackResult?.candidates?.[0]?.content?.parts?.[0]?.text ||
+          feedbackResult.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
           "Unable to generate feedback.";
 
         const feedbackLogEntry: LogEntry = {
@@ -546,25 +533,22 @@ Based on their response, ask your next HR-focused question covering:
 
 Ask one clear, empathetic question:`;
 
-        const questionPayload = {
-          contents: [{ role: "user", parts: [{ text: nextQuestionPrompt }] }],
-        };
-        const questionResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(questionPayload),
-          }
-        );
+        // Use backend proxy for secure API calls
+        const questionResult = await generateContent({
+          prompt: nextQuestionPrompt,
+          model: "gemini-2.5-flash",
+          maxOutputTokens: 8192,
+          temperature: 0.7,
+        });
 
-        if (!questionResponse.ok) {
-          throw new Error(`Gemini API Error: ${questionResponse.status}`);
+        if (!questionResult.success) {
+          throw new Error(
+            questionResult.error || "Failed to generate next question"
+          );
         }
 
-        const questionResult = await questionResponse.json();
         const nextQuestion =
-          questionResult?.candidates?.[0]?.content?.parts?.[0]?.text ||
+          questionResult.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
           "What are your career goals?";
 
         // Add interviewer's question to log

@@ -13,9 +13,9 @@ import {
   saveInterviewSession,
   updateInterviewSession,
 } from "@/services/testStorage";
+import { generateContent } from "@/services/geminiService";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 
 type LogEntry = {
   speaker:
@@ -235,26 +235,23 @@ Introduce yourself as Robert Martinez and ask your first managerial question. Fo
 
 Start with a professional introduction and your first strategic question.`;
 
+      const result = await generateContent({
+        prompt: introPrompt,
+        model: "gemini-2.5-flash",
+        maxOutputTokens: 8192,
+        temperature: 0.7,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to generate content");
+      }
+
+      const text =
+        result.data || "I could not generate a response. Please try again.";
+
       const initialChatHistory = [
         { role: "user", parts: [{ text: introPrompt }] },
       ];
-      const payload = { contents: initialChatHistory };
-      const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Gemini API Error: ${response.status}`);
-      }
-
-      const result = await response.json();
-      const text =
-        result?.candidates?.[0]?.content?.parts?.[0]?.text ||
-        "I could not generate a response. Please try again.";
 
       const initialLog: LogEntry[] = [
         {
@@ -370,22 +367,16 @@ As Robert Martinez, acknowledge professionally and provide strategic feedback co
 7. Development opportunities
 8. Overall assessment for the role`;
 
-        const feedbackPayload = {
-          contents: [{ role: "user", parts: [{ text: feedbackPrompt }] }],
-        };
-        const feedbackResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(feedbackPayload),
-          }
-        );
+        const feedbackResult = await generateContent({
+          prompt: feedbackPrompt,
+          model: "gemini-2.5-flash",
+          maxOutputTokens: 8192,
+          temperature: 0.7,
+        });
 
-        if (feedbackResponse.ok) {
-          const feedbackResult = await feedbackResponse.json();
+        if (feedbackResult.success) {
           const feedbackText =
-            feedbackResult?.candidates?.[0]?.content?.parts?.[0]?.text ||
+            feedbackResult.data ||
             "Thank you for your time. We'll be in touch regarding next steps.";
 
           const feedbackLogEntry: LogEntry = {
@@ -481,26 +472,21 @@ Provide detailed feedback as Robert Martinez covering:
 10. Development areas with executive-level guidance
 11. Overall assessment for the managerial/leadership role`;
 
-        const feedbackPayload = {
-          contents: [{ role: "user", parts: [{ text: feedbackPrompt }] }],
-        };
-        const feedbackResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(feedbackPayload),
-          }
-        );
+        const feedbackResult = await generateContent({
+          prompt: feedbackPrompt,
+          model: "gemini-2.5-flash",
+          maxOutputTokens: 8192,
+          temperature: 0.7,
+        });
 
-        if (!feedbackResponse.ok) {
-          throw new Error(`Gemini API Error: ${feedbackResponse.status}`);
+        if (!feedbackResult.success) {
+          throw new Error(
+            feedbackResult.error || "Failed to generate feedback"
+          );
         }
 
-        const feedbackResult = await feedbackResponse.json();
         const feedbackText =
-          feedbackResult?.candidates?.[0]?.content?.parts?.[0]?.text ||
-          "Unable to generate feedback.";
+          feedbackResult.data || "Unable to generate feedback.";
 
         const feedbackLogEntry: LogEntry = {
           speaker: "Feedback",
@@ -556,26 +542,21 @@ Based on their response, ask your next managerial question focusing on:
 
 Ask one clear, strategic question:`;
 
-        const questionPayload = {
-          contents: [{ role: "user", parts: [{ text: nextQuestionPrompt }] }],
-        };
-        const questionResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(questionPayload),
-          }
-        );
+        const questionResult = await generateContent({
+          prompt: nextQuestionPrompt,
+          model: "gemini-2.5-flash",
+          maxOutputTokens: 8192,
+          temperature: 0.7,
+        });
 
-        if (!questionResponse.ok) {
-          throw new Error(`Gemini API Error: ${questionResponse.status}`);
+        if (!questionResult.success) {
+          throw new Error(
+            questionResult.error || "Failed to generate next question"
+          );
         }
 
-        const questionResult = await questionResponse.json();
         const nextQuestion =
-          questionResult?.candidates?.[0]?.content?.parts?.[0]?.text ||
-          "What are your career goals?";
+          questionResult.data || "What are your career goals?";
 
         // Add interviewer's question to log
         const interviewerLogEntry: LogEntry = {

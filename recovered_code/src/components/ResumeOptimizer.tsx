@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader, Download, Sparkles, FileText, Eye } from "lucide-react";
 import jsPDF from "jspdf";
+import { generateContent } from "@/services/geminiService";
 
 const ResumeOptimizer = () => {
   const [resumeText, setResumeText] = useState<string>("");
@@ -28,8 +29,6 @@ const ResumeOptimizer = () => {
 
   const [message, setMessage] = useState<string>("");
   const [isError, setIsError] = useState<boolean>(false);
-
-  const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
   // Initialize with example data
   useEffect(() => {
@@ -55,50 +54,35 @@ We are looking for a highly motivated Senior Software Engineer with 5+ years of 
     setIsError(error);
   };
 
-  const callApi = async (payload: any, maxRetries: number = 3) => {
-    const apiKey = GEMINI_API_KEY || "";
-    const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-
+  const callApi = async (promptText: string, maxRetries: number = 3) => {
+    // Call backend proxy which handles user API key vs app API key automatically
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const response = await fetch(apiUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+        const result = await generateContent({
+          prompt: promptText,
+          model: "gemini-2.5-flash",
+          maxOutputTokens: 8192,
+          temperature: 0.7,
         });
 
-        if (response.status === 429) {
-          const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-          console.warn(
-            `Attempt ${
-              attempt + 1
-            }: Rate limit exceeded. Retrying in ${Math.floor(delay)}ms...`
-          );
-          if (attempt < maxRetries - 1) {
-            await new Promise((resolve) => setTimeout(resolve, delay));
-            continue;
-          }
-          throw new Error("API rate limit exceeded after multiple retries.");
+        if (!result.success) {
+          throw new Error(result.error || "Failed to generate content");
         }
 
-        if (!response.ok) {
-          const errorBody = await response.text();
-          throw new Error(
-            `API request failed with status ${response.status}: ${errorBody}`
-          );
-        }
-
-        return await response.json();
+        console.log("✓ API call succeeded via backend proxy");
+        // Return in format expected by existing code
+        return {
+          candidates: [{ content: { parts: [{ text: result.data }] } }],
+        };
       } catch (error) {
         console.error(
           `Attempt ${attempt + 1} failed:`,
           (error as Error).message
         );
         if (attempt === maxRetries - 1) {
-          throw new Error(
-            "Failed to connect to the API after multiple retries."
-          );
+          throw error;
         }
+        // Exponential backoff
         const delay = Math.pow(2, attempt + 1) * 1000 + Math.random() * 1000;
         console.warn(`Retrying in ${Math.floor(delay)}ms...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -126,12 +110,9 @@ We are looking for a highly motivated Senior Software Engineer with 5+ years of 
 
       const userQuery = `Original Resume to Critique:\n\n---\n${resumeText}\n---\n\nTarget Job Description:\n\n---\n${jobDescription}\n---`;
 
-      const payload = {
-        contents: [{ parts: [{ text: userQuery }] }],
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-      };
+      const combinedPrompt = `${systemPrompt}\n\n${userQuery}`;
 
-      const result = await callApi(payload);
+      const result = await callApi(combinedPrompt);
       const generatedText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
 
       if (generatedText) {
@@ -178,13 +159,9 @@ We are looking for a highly motivated Senior Software Engineer with 5+ years of 
 
       const userQuery = `Original Resume:\n\n---\n${resumeText}\n---\n\nJob Description:\n\n---\n${jobDescription}\n---`;
 
-      const payload = {
-        contents: [{ parts: [{ text: userQuery }] }],
-        tools: [{ google_search: {} }],
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-      };
+      const combinedPrompt = `${systemPrompt}\n\n${userQuery}`;
 
-      const result = await callApi(payload);
+      const result = await callApi(combinedPrompt);
       const generatedText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
 
       if (generatedText) {
@@ -245,12 +222,9 @@ We are looking for a highly motivated Senior Software Engineer with 5+ years of 
 
       const userQuery = `Optimized Resume (Source Content):\n\n---\n${optimizedText}\n---\n\nTarget Job Description:\n\n---\n${jobDescription}\n---`;
 
-      const payload = {
-        contents: [{ parts: [{ text: userQuery }] }],
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-      };
+      const combinedPrompt = `${systemPrompt}\n\n${userQuery}`;
 
-      const result = await callApi(payload);
+      const result = await callApi(combinedPrompt);
       const generatedText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
 
       if (generatedText) {

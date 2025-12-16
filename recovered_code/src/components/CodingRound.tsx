@@ -18,6 +18,11 @@ import {
 import api from "@/services/api";
 import axios from "axios";
 import { saveCodingTest } from "@/services/testStorage";
+import { generateJSON } from "@/services/geminiService";
+import {
+  submitCode,
+  languageMap as judge0LanguageMap,
+} from "@/services/judge0Service";
 
 // Type declarations for Monaco Editor
 declare global {
@@ -27,8 +32,7 @@ declare global {
   }
 }
 
-// Environment variables - these will be provided in your .env file
-const APP_GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
+// Backend URL for Judge0 API proxy
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
 const languageMap = {
@@ -74,8 +78,6 @@ const App = ({ onProceed }: CodingRoundProps) => {
   const [modalMessage, setModalMessage] = useState(null);
   const [showBackConfirm, setShowBackConfirm] = useState(false);
   const [isEditorReady, setIsEditorReady] = useState(false);
-  const [userApiKey, setUserApiKey] = useState<string | null>(null);
-  const [usingUserKey, setUsingUserKey] = useState<boolean>(false);
   const monacoEditorRef = useRef(null);
   const lastGenerationTime = useRef(0);
   const lastApiCallTime = useRef(0);
@@ -135,23 +137,6 @@ const App = ({ onProceed }: CodingRoundProps) => {
         monacoEditorRef.current.dispose();
       }
     };
-  }, []);
-
-  // Load user's Gemini API key from backend
-  useEffect(() => {
-    const loadUserApiKey = async () => {
-      try {
-        const response = await api.get("/users/api-keys/gemini");
-        if (response.data.success && response.data.data.apiKey) {
-          setUserApiKey(response.data.data.apiKey);
-          setUsingUserKey(true);
-        }
-      } catch (error) {
-        console.log("No user API key found, will use application key");
-        setUsingUserKey(false);
-      }
-    };
-    loadUserApiKey();
   }, []);
 
   // Update editor language and content when state changes
@@ -325,8 +310,8 @@ int main() {
     };
   };
 
-  // Helper function to call Gemini API with user key fallback and rate limiting
-  const callGeminiAPI = async (payload: any, retries = 3, delayMs = 5000) => {
+  // Simplified callGeminiAPI function using backend proxy
+  const callGeminiAPI = async (promptText: string, maxOutputTokens = 32768) => {
     // Implement rate limiting: minimum 3 seconds between API calls
     const now = Date.now();
     const timeSinceLastCall = now - lastApiCallTime.current;
@@ -336,92 +321,20 @@ int main() {
     }
     lastApiCallTime.current = Date.now();
 
-    let lastError: any = null;
+    // Call backend proxy which handles user API key vs app API key automatically
+    const result = await generateJSON({
+      prompt: promptText,
+      model: "gemini-2.5-flash",
+      maxOutputTokens: maxOutputTokens,
+      temperature: 0.7,
+    });
 
-    // Try with user's API key first if available
-    if (userApiKey) {
-      for (let attempt = 0; attempt < retries; attempt++) {
-        try {
-          const userApiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${userApiKey}`;
-          const response = await fetch(userApiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-
-          if (response.ok) {
-            setUsingUserKey(true);
-            return await response.json();
-          }
-
-          if (response.status === 429) {
-            console.warn(
-              `User API key rate limited, attempt ${attempt + 1}/${retries}`
-            );
-            if (attempt < retries - 1) {
-              await new Promise((resolve) =>
-                setTimeout(resolve, delayMs * Math.pow(2, attempt))
-              );
-              continue;
-            }
-          }
-
-          lastError = new Error(
-            `User API key failed with status: ${response.status}`
-          );
-          console.warn(
-            "User API key failed, falling back to app key:",
-            lastError.message
-          );
-          break;
-        } catch (error) {
-          lastError = error;
-          console.warn("User API key error, falling back to app key:", error);
-          break;
-        }
-      }
+    if (!result.success) {
+      throw new Error(result.error || "Failed to generate content");
     }
 
-    // Fall back to application's API key
-    setUsingUserKey(false);
-    for (let attempt = 0; attempt < retries; attempt++) {
-      try {
-        const appApiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${APP_GEMINI_API_KEY}`;
-        const response = await fetch(appApiUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        if (response.ok) {
-          return await response.json();
-        }
-
-        if (response.status === 429) {
-          console.warn(
-            `App API key rate limited, attempt ${attempt + 1}/${retries}`
-          );
-          if (attempt < retries - 1) {
-            await new Promise((resolve) =>
-              setTimeout(resolve, delayMs * Math.pow(2, attempt))
-            );
-            continue;
-          }
-        }
-
-        throw new Error(`App API key failed with status: ${response.status}`);
-      } catch (error) {
-        lastError = error;
-        if (attempt < retries - 1) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, delayMs * Math.pow(2, attempt))
-          );
-          continue;
-        }
-      }
-    }
-
-    throw lastError || new Error("All API calls failed");
+    // Return the parsed data directly (backend already parses JSON)
+    return result.data;
   };
 
   const handleGenerateQuestion = async () => {
@@ -668,48 +581,9 @@ RESPOND WITH ONLY THE JSON OBJECT - NO EXPLANATIONS, NO MARKDOWN, NO CODE BLOCKS
 
       // Fallback to direct Gemini call if backend failed or didn't return a question
       if (!generatedQuestion) {
-        console.log(
-          "Trying direct Gemini API call with user/app key fallback..."
-        );
-        const data = await callGeminiAPI(payload);
-        const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        const finishReason = data?.candidates?.[0]?.finishReason;
-
-        if (!textContent) {
-          throw new Error(
-            "Invalid response from Gemini API. No text content found."
-          );
-        }
-
-        // Check if response was truncated due to token limit
-        if (finishReason === "MAX_TOKENS") {
-          console.warn("⚠️ Response may be truncated due to token limit");
-          throw new Error(
-            "Response was truncated. The question may be incomplete. Please try again."
-          );
-        }
-
-        try {
-          // Clean the response to extract JSON
-          let jsonText = textContent.trim();
-
-          // Remove markdown code blocks if present
-          if (jsonText.startsWith("```json")) {
-            jsonText = jsonText
-              .replace(/```json\s*/, "")
-              .replace(/\s*```$/, "");
-          } else if (jsonText.startsWith("```")) {
-            jsonText = jsonText.replace(/```\s*/, "").replace(/\s*```$/, "");
-          }
-
-          generatedQuestion = JSON.parse(jsonText);
-        } catch (e) {
-          console.error("Failed to parse Gemini response:", e);
-          console.error("Raw response:", textContent.substring(0, 500));
-          throw new Error(
-            "Gemini response was not valid JSON. Please try again."
-          );
-        }
+        console.log("Trying backend Gemini proxy...");
+        // The backend proxy already parses JSON, so we get the data directly
+        generatedQuestion = await callGeminiAPI(combinedPrompt, 32768);
       }
 
       // Ensure we have a question
@@ -855,48 +729,20 @@ RESPOND WITH ONLY THE JSON OBJECT - NO EXPLANATIONS, NO MARKDOWN, NO CODE BLOCKS
     console.log("Code length:", fullCode.length);
 
     try {
-      const JUDGE0_API_URL = "https://judge0-ce.p.rapidapi.com/submissions";
-      const JUDGE0_API_HOST = "judge0-ce.p.rapidapi.com";
-      const JUDGE0_API_KEY = import.meta.env.VITE_JUDGE0_API_KEY;
-
-      if (!JUDGE0_API_KEY) {
-        throw new Error(
-          "Judge0 API key is not configured. Please check your environment variables."
-        );
-      }
-
-      const languageMap = {
-        javascript: 63, // JavaScript (Node.js 14.17.0)
-        python: 71, // Python (3.8.1)
-        cpp: 54, // C++ (GCC 9.2.0)
-        java: 62, // Java (OpenJDK 13.0.1)
-      };
-
       const results = [];
 
       for (const testCase of testCases) {
         try {
           const { input, output } = testCase;
 
-          const submissionResponse = await axios.post(
-            `${JUDGE0_API_URL}?base64_encoded=false&wait=true`,
-            {
-              source_code: fullCode,
-              language_id: languageMap[language],
-              stdin: input,
-              cpu_time_limit: 5,
-              memory_limit: 128000,
-            },
-            {
-              headers: {
-                "X-RapidAPI-Host": JUDGE0_API_HOST,
-                "X-RapidAPI-Key": JUDGE0_API_KEY,
-                "Content-Type": "application/json",
-              },
-            }
-          );
-
-          const submission = submissionResponse.data;
+          // Submit code via backend proxy
+          const submission = await submitCode({
+            source_code: fullCode,
+            language_id: judge0LanguageMap[language],
+            stdin: input,
+            cpu_time_limit: 5,
+            memory_limit: 128000,
+          });
 
           const actualOutput = (submission.stdout || "").trim();
           const expected = (output || "").trim();
@@ -1097,43 +943,24 @@ RESPOND WITH ONLY THE JSON OBJECT - NO EXPLANATIONS, NO MARKDOWN, NO CODE BLOCKS
       )}
 
       <div className="max-w-7xl mx-auto">
-        {/* API Key Usage Banner */}
-        {userApiKey && (
-          <Alert className="mb-4 bg-green-900 border-green-700">
-            <AlertDescription className="text-green-100">
-              🔑 Using your personal Gemini API key for question generation.{" "}
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  window.location.href = "/?page=settings";
-                }}
-                className="underline hover:text-green-200"
-              >
-                Manage API keys
-              </a>
-            </AlertDescription>
-          </Alert>
-        )}
-        {!userApiKey && (
-          <Alert className="mb-4 bg-blue-900 border-blue-700">
-            <AlertDescription className="text-blue-100">
-              ℹ️ Using application's Gemini API key. To avoid rate limiting, add
-              your own API key in{" "}
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  window.location.href = "/?page=settings";
-                }}
-                className="underline hover:text-blue-200"
-              >
-                Settings
-              </a>
-              .
-            </AlertDescription>
-          </Alert>
-        )}
+        {/* API Key Info Banner */}
+        <Alert className="mb-4 bg-blue-900 border-blue-700">
+          <AlertDescription className="text-blue-100">
+            🔐 All API calls are securely handled through the backend. To use
+            your own Gemini API key and avoid rate limiting, add it in{" "}
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                window.location.href = "/?page=settings";
+              }}
+              className="underline hover:text-blue-200"
+            >
+              Settings
+            </a>
+            .
+          </AlertDescription>
+        </Alert>
 
         <header className="flex flex-col sm:flex-row justify-between items-center mb-6">
           <div className="flex items-center gap-4">

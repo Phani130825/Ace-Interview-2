@@ -20,6 +20,8 @@ import pipelineRoutes from './routes/pipelines.js';
 import aiInterviewRoutes from './routes/aiInterview.js';
 import aptitudeRoutes from './routes/aptitude.js';
 import codingRoutes from './routes/coding.js';
+import geminiRoutes from './routes/gemini.js';
+import judge0Routes from './routes/judge0.js';
 
 import submissionsRoutes from './routes/submissions.js';
 import aptitudeTestsRoutes from './routes/aptitudeTests.js';
@@ -93,6 +95,8 @@ app.use('/api/pipelines', authenticateToken, pipelineRoutes);
 app.use('/api/ai-interview', authenticateToken, aiInterviewRoutes);
 app.use('/api/aptitude', authenticateToken, aptitudeRoutes);
 app.use('/api/coding', authenticateToken, codingRoutes);
+app.use('/api/gemini', authenticateToken, geminiRoutes);
+app.use('/api/judge0', authenticateToken, judge0Routes);
 
 app.use('/api/submissions', authenticateToken, submissionsRoutes);
 app.use('/api/aptitude-tests', authenticateToken, aptitudeTestsRoutes);

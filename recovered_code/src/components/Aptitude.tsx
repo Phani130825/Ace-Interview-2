@@ -1,18 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { saveAptitudeTest } from "@/services/testStorage";
+import { generateContent } from "@/services/geminiService";
 
-/* ============================
-   ENV CONFIG
-============================ */
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
-
-/* ============================
-   GEMINI v1 API (STABLE)
-============================ */
-const API_URL =
-  "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=" +
-  GEMINI_API_KEY;
 
 /* ============================
    HELPER: CLEAN JSON
@@ -101,25 +91,9 @@ const Aptitude = ({ onProceed }: AptitudeProps) => {
     }
 
     /* ============================
-       2️⃣ GEMINI FALLBACK (v1)
+       2️⃣ GEMINI FALLBACK (backend proxy)
     ============================ */
-    // Check if API key is available
-    if (!GEMINI_API_KEY) {
-      console.error("VITE_GEMINI_API_KEY is not set in environment variables");
-      setErrorMessage(
-        "Configuration error: API key not set. Please contact support."
-      );
-      setStage("error");
-      return;
-    }
-
-    const payload = {
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text: `
+    const promptText = `
 Generate exactly 25 aptitude multiple-choice questions.
 
 Return ONLY valid JSON in this exact format:
@@ -137,35 +111,24 @@ Rules:
 - No explanations
 - No markdown
 - No extra text
-`,
-            },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 4096,
-      },
-    };
+`;
 
     try {
-      const response = await fetch(API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      const result = await generateContent({
+        prompt: promptText,
+        model: "gemini-2.5-flash",
+        maxOutputTokens: 4096,
+        temperature: 0.7,
       });
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(errText);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to generate questions");
       }
 
-      const result = await response.json();
-
-      const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+      const text = result.data;
 
       if (!text) {
-        throw new Error("Invalid Gemini response");
+        throw new Error("Invalid response");
       }
 
       // Clean the response before parsing

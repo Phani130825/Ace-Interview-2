@@ -13,9 +13,9 @@ import {
   saveInterviewSession,
   updateInterviewSession,
 } from "@/services/testStorage";
+import { generateContent } from "@/services/geminiService";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 
 type LogEntry = {
   speaker:
@@ -60,18 +60,6 @@ const TechnicalInterviewSimulator = ({
   const chatEndRef = useRef<HTMLDivElement>(null);
   const speechRecognitionRef = useRef<any>(null);
   const { toast } = useToast();
-
-  // Validate API key on mount
-  useEffect(() => {
-    if (!GEMINI_API_KEY) {
-      toast({
-        title: "Configuration Error",
-        description:
-          "Gemini API key is not configured. Please check your environment variables.",
-        variant: "destructive",
-      });
-    }
-  }, [toast]);
 
   // Speech Recognition Setup
   useEffect(() => {
@@ -229,26 +217,23 @@ Provide your introduction as Dr. Sarah Chen and ask the first technical question
 
 Start naturally with your introduction and first question.`;
 
+      const result = await generateContent({
+        prompt: introPrompt,
+        model: "gemini-2.5-flash",
+        maxOutputTokens: 8192,
+        temperature: 0.7,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to generate content");
+      }
+
+      const text =
+        result.data || "I could not generate a response. Please try again.";
+
       const initialChatHistory = [
         { role: "user", parts: [{ text: introPrompt }] },
       ];
-      const payload = { contents: initialChatHistory };
-      const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Gemini API Error: ${response.status}`);
-      }
-
-      const result = await response.json();
-      const text =
-        result?.candidates?.[0]?.content?.parts?.[0]?.text ||
-        "I could not generate a response. Please try again.";
 
       const initialLog: LogEntry[] = [
         {
@@ -368,22 +353,16 @@ As Dr. Sarah Chen, acknowledge their thanks professionally and provide feedback 
 4. Areas that could have been explored further
 5. Recommendations for continued learning`;
 
-        const feedbackPayload = {
-          contents: [{ role: "user", parts: [{ text: feedbackPrompt }] }],
-        };
-        const feedbackResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(feedbackPayload),
-          }
-        );
+        const feedbackResult = await generateContent({
+          prompt: feedbackPrompt,
+          model: "gemini-2.5-flash",
+          maxOutputTokens: 8192,
+          temperature: 0.7,
+        });
 
-        if (feedbackResponse.ok) {
-          const feedbackResult = await feedbackResponse.json();
+        if (feedbackResult.success) {
           const feedbackText =
-            feedbackResult?.candidates?.[0]?.content?.parts?.[0]?.text ||
+            feedbackResult.data ||
             "Thank you for your time. Best of luck with your preparation!";
 
           const feedbackLogEntry: LogEntry = {
@@ -469,26 +448,21 @@ Provide detailed feedback as Dr. Sarah Chen covering:
 7. Specific areas for improvement with actionable advice
 8. Overall assessment and recommendation`;
 
-        const feedbackPayload = {
-          contents: [{ role: "user", parts: [{ text: feedbackPrompt }] }],
-        };
-        const feedbackResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(feedbackPayload),
-          }
-        );
+        const feedbackResult = await generateContent({
+          prompt: feedbackPrompt,
+          model: "gemini-2.5-flash",
+          maxOutputTokens: 8192,
+          temperature: 0.7,
+        });
 
-        if (!feedbackResponse.ok) {
-          throw new Error(`Gemini API Error: ${feedbackResponse.status}`);
+        if (!feedbackResult.success) {
+          throw new Error(
+            feedbackResult.error || "Failed to generate feedback"
+          );
         }
 
-        const feedbackResult = await feedbackResponse.json();
         const feedbackText =
-          feedbackResult?.candidates?.[0]?.content?.parts?.[0]?.text ||
-          "Unable to generate feedback.";
+          feedbackResult.data || "Unable to generate feedback.";
 
         const feedbackLogEntry: LogEntry = {
           speaker: "Feedback",
@@ -560,26 +534,21 @@ Candidate's last answer: ${currentAnswer}
 
 Ask one focused question that builds on the conversation and assesses technical skills.`;
 
-        const questionPayload = {
-          contents: [{ role: "user", parts: [{ text: nextQuestionPrompt }] }],
-        };
-        const questionResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(questionPayload),
-          }
-        );
+        const questionResult = await generateContent({
+          prompt: nextQuestionPrompt,
+          model: "gemini-2.5-flash",
+          maxOutputTokens: 8192,
+          temperature: 0.7,
+        });
 
-        if (!questionResponse.ok) {
-          throw new Error(`Gemini API Error: ${questionResponse.status}`);
+        if (!questionResult.success) {
+          throw new Error(
+            questionResult.error || "Failed to generate next question"
+          );
         }
 
-        const questionResult = await questionResponse.json();
         const nextQuestion =
-          questionResult?.candidates?.[0]?.content?.parts?.[0]?.text ||
-          "What are your career goals?";
+          questionResult.data || "What are your career goals?";
 
         // Add interviewer's question to log
         const interviewerLogEntry: LogEntry = {

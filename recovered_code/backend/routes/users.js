@@ -289,13 +289,39 @@ router.put('/job-preferences', asyncHandler(async (req, res) => {
 
 // Helper function to fetch jobs from Jooble API
 const fetchJobsFromJooble = async (prefs, joobleApiKey) => {
+  // Build keywords from roles of interest
   const keywords = [...prefs.rolesOfInterest];
+  
+  // Add experience level keywords
+  if (prefs.experienceLevel) {
+    switch (prefs.experienceLevel) {
+      case 'entry':
+        keywords.push('entry level', 'fresher', 'junior', 'graduate', 'trainee');
+        break;
+      case 'mid':
+        keywords.push('mid level', 'intermediate', 'experienced');
+        break;
+      case 'senior':
+        keywords.push('senior', 'lead', 'principal');
+        break;
+      case 'lead':
+        keywords.push('lead', 'manager', 'head', 'director');
+        break;
+    }
+  }
+  
+  // Add job type keywords
+  if (prefs.jobType && prefs.jobType !== '') {
+    keywords.push(prefs.jobType);
+  }
+  
+  // Add top skills
   if (prefs.skills && prefs.skills.length > 0) {
-    keywords.push(...prefs.skills.slice(0, 2));
+    keywords.push(...prefs.skills.slice(0, 3));
   }
 
   const searchQuery = {
-    keywords: keywords.join(' OR '),
+    keywords: keywords.join(' '),
     location: [prefs.location?.city, prefs.location?.country]
       .filter(Boolean)
       .join(', ') || 'Remote',
@@ -363,6 +389,57 @@ router.get('/jobs', asyncHandler(async (req, res) => {
     // Fetch jobs from Jooble API
     const allJobs = await fetchJobsFromJooble(prefs, joobleApiKey);
     
+    // Deduplicate jobs by link (unique identifier)
+    const uniqueJobs = [];
+    const seenLinks = new Set();
+    
+    for (const job of allJobs) {
+      if (!seenLinks.has(job.link)) {
+        seenLinks.add(job.link);
+        
+        // Filter by experience level if specified
+        if (prefs.experienceLevel && prefs.experienceLevel !== '') {
+          const titleLower = (job.title + ' ' + (job.snippet || '')).toLowerCase();
+          
+          let matchesExperience = false;
+          switch (prefs.experienceLevel) {
+            case 'entry':
+              matchesExperience = titleLower.includes('entry') || 
+                                  titleLower.includes('junior') || 
+                                  titleLower.includes('fresher') || 
+                                  titleLower.includes('graduate') ||
+                                  titleLower.includes('trainee') ||
+                                  (!titleLower.includes('senior') && !titleLower.includes('lead'));
+              break;
+            case 'mid':
+              matchesExperience = !titleLower.includes('senior') && 
+                                  !titleLower.includes('lead') &&
+                                  !titleLower.includes('junior') &&
+                                  !titleLower.includes('entry');
+              break;
+            case 'senior':
+              matchesExperience = titleLower.includes('senior') || 
+                                  titleLower.includes('principal');
+              break;
+            case 'lead':
+              matchesExperience = titleLower.includes('lead') || 
+                                  titleLower.includes('manager') ||
+                                  titleLower.includes('director') ||
+                                  titleLower.includes('head');
+              break;
+            default:
+              matchesExperience = true;
+          }
+          
+          if (matchesExperience) {
+            uniqueJobs.push(job);
+          }
+        } else {
+          uniqueJobs.push(job);
+        }
+      }
+    }
+    
     // Separate jobs into dream company and regular jobs
     let dreamCompanyJobs = [];
     let regularJobs = [];
@@ -370,19 +447,19 @@ router.get('/jobs', asyncHandler(async (req, res) => {
     if (prefs.dreamCompanies && prefs.dreamCompanies.length > 0) {
       const dreamCompanyLower = prefs.dreamCompanies.map(c => c.toLowerCase());
       
-      dreamCompanyJobs = allJobs.filter(job => 
+      dreamCompanyJobs = uniqueJobs.filter(job => 
         dreamCompanyLower.some(company => 
           job.company.toLowerCase().includes(company)
         )
       );
       
-      regularJobs = allJobs.filter(job => 
+      regularJobs = uniqueJobs.filter(job => 
         !dreamCompanyLower.some(company => 
           job.company.toLowerCase().includes(company)
         )
       );
     } else {
-      regularJobs = allJobs;
+      regularJobs = uniqueJobs;
     }
 
     // Prioritize dream company jobs, then add regular jobs
@@ -414,7 +491,7 @@ router.get('/jobs', asyncHandler(async (req, res) => {
     jobCache.set(userId, {
       jobs: formattedJobs,
       dreamCompanyJobs: formattedDreamJobs,
-      totalJobs: allJobs.length,
+      totalJobs: uniqueJobs.length,
       timestamp: now
     });
 
@@ -422,7 +499,7 @@ router.get('/jobs', asyncHandler(async (req, res) => {
       success: true,
       data: {
         jobs: formattedJobs,
-        totalJobs: allJobs.length,
+        totalJobs: uniqueJobs.length,
         cached: false
       }
     });
@@ -489,9 +566,60 @@ router.get('/jobs/dream-companies', asyncHandler(async (req, res) => {
     // Fetch jobs from Jooble API
     const allJobs = await fetchJobsFromJooble(prefs, joobleApiKey);
     
+    // Deduplicate jobs by link (unique identifier)
+    const uniqueJobs = [];
+    const seenLinks = new Set();
+    
+    for (const job of allJobs) {
+      if (!seenLinks.has(job.link)) {
+        seenLinks.add(job.link);
+        
+        // Filter by experience level if specified
+        if (prefs.experienceLevel && prefs.experienceLevel !== '') {
+          const titleLower = (job.title + ' ' + (job.snippet || '')).toLowerCase();
+          
+          let matchesExperience = false;
+          switch (prefs.experienceLevel) {
+            case 'entry':
+              matchesExperience = titleLower.includes('entry') || 
+                                  titleLower.includes('junior') || 
+                                  titleLower.includes('fresher') || 
+                                  titleLower.includes('graduate') ||
+                                  titleLower.includes('trainee') ||
+                                  (!titleLower.includes('senior') && !titleLower.includes('lead'));
+              break;
+            case 'mid':
+              matchesExperience = !titleLower.includes('senior') && 
+                                  !titleLower.includes('lead') &&
+                                  !titleLower.includes('junior') &&
+                                  !titleLower.includes('entry');
+              break;
+            case 'senior':
+              matchesExperience = titleLower.includes('senior') || 
+                                  titleLower.includes('principal');
+              break;
+            case 'lead':
+              matchesExperience = titleLower.includes('lead') || 
+                                  titleLower.includes('manager') ||
+                                  titleLower.includes('director') ||
+                                  titleLower.includes('head');
+              break;
+            default:
+              matchesExperience = true;
+          }
+          
+          if (matchesExperience) {
+            uniqueJobs.push(job);
+          }
+        } else {
+          uniqueJobs.push(job);
+        }
+      }
+    }
+    
     // Filter ONLY dream company jobs
     const dreamCompanyLower = prefs.dreamCompanies.map(c => c.toLowerCase());
-    const dreamCompanyJobs = allJobs.filter(job => 
+    const dreamCompanyJobs = uniqueJobs.filter(job => 
       dreamCompanyLower.some(company => 
         job.company.toLowerCase().includes(company)
       )
@@ -510,7 +638,7 @@ router.get('/jobs/dream-companies', asyncHandler(async (req, res) => {
 
     // Update cache if not exists (jobs endpoint will also populate this)
     if (!cachedData) {
-      const regularJobs = allJobs.filter(job => 
+      const regularJobs = uniqueJobs.filter(job => 
         !dreamCompanyLower.some(company => 
           job.company.toLowerCase().includes(company)
         )
@@ -529,7 +657,7 @@ router.get('/jobs/dream-companies', asyncHandler(async (req, res) => {
       jobCache.set(userId, {
         jobs: mixedJobs,
         dreamCompanyJobs: formattedDreamJobs,
-        totalJobs: allJobs.length,
+        totalJobs: uniqueJobs.length,
         timestamp: now
       });
     }

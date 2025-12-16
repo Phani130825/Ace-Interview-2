@@ -14,6 +14,7 @@ import {
 import pdfMake from "pdfmake/build/pdfmake";
 import pdfFonts from "pdfmake/build/vfs_fonts";
 import api from "@/services/api";
+import { generateContent } from "@/services/geminiService";
 
 // Initialize pdfMake with fonts
 pdfMake.vfs = pdfFonts;
@@ -84,41 +85,15 @@ const ResumePDFGenerator = ({ onNavigate }: ResumePDFGeneratorProps = {}) => {
   >(new Map());
   const [lastProcessedResume, setLastProcessedResume] = useState<string>("");
   const [lastProcessedJob, setLastProcessedJob] = useState<string>("");
-  const [userApiKey, setUserApiKey] = useState<string | null>(null);
-  const [usingUserKey, setUsingUserKey] = useState<boolean>(false);
 
-  const APP_GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
   const MIN_API_CALL_INTERVAL = 3000; // Increased to 3 seconds between API calls
-
-  // Load user's API key on component mount
-  useEffect(() => {
-    const loadUserApiKey = async () => {
-      try {
-        const response = await api.get("/users/api-keys/gemini");
-        if (response.data.success && response.data.data.apiKey) {
-          setUserApiKey(response.data.data.apiKey);
-          console.log("✓ User's Gemini API key loaded");
-        }
-      } catch (error) {
-        console.log("No user API key configured, will use app's key");
-      }
-    };
-    loadUserApiKey();
-  }, []);
 
   const showMessage = (msg: string, error: boolean = false) => {
     setMessage(msg);
     setIsError(error);
   };
 
-  const callGeminiAPI = async (payload: any, maxRetries: number = 3) => {
-    // Try user's key first, fallback to app's key
-    const primaryKey = userApiKey || APP_GEMINI_API_KEY;
-    const fallbackKey = userApiKey ? APP_GEMINI_API_KEY : null;
-
-    let apiKey = primaryKey;
-    let isUsingFallback = false;
-
+  const callGeminiAPI = async (promptText: string, maxRetries: number = 3) => {
     // Enforce minimum interval between API calls
     const now = Date.now();
     const timeSinceLastCall = now - lastApiCall;
@@ -128,114 +103,39 @@ const ResumePDFGenerator = ({ onNavigate }: ResumePDFGeneratorProps = {}) => {
       await new Promise((resolve) => setTimeout(resolve, waitTime));
     }
 
-    // Function to try API call with a specific key
-    const tryApiCall = async (
-      key: string,
-      isFallback: boolean = false
-    ): Promise<any> => {
-      const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${key}`;
+    setLastApiCall(Date.now());
 
-      for (let attempt = 0; attempt < maxRetries; attempt++) {
-        try {
-          setLastApiCall(Date.now());
-          setUsingUserKey(userApiKey === key && !isFallback);
+    // Call backend proxy which handles user API key vs app API key automatically
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const result = await generateContent({
+          prompt: promptText,
+          model: "gemini-2.5-flash",
+          maxOutputTokens: 8192,
+          temperature: 0.7,
+        });
 
-          const response = await fetch(apiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-
-          if (response.status === 429) {
-            // Rate limit - if we have fallback key and this is first attempt with user key, try fallback
-            if (!isFallback && fallbackKey && attempt === 0) {
-              console.log(
-                "⚠️ User's API key rate limited, switching to app's key..."
-              );
-              throw new Error("SWITCH_TO_FALLBACK");
-            }
-
-            // For rate limit errors, use longer exponential backoff
-            const baseDelay = 5000; // Start with 5 seconds
-            const delay =
-              baseDelay * Math.pow(2, attempt) + Math.random() * 2000;
-            console.warn(
-              `Rate limit exceeded${
-                isFallback ? " (fallback key)" : ""
-              }. Retrying in ${Math.floor(delay / 1000)} seconds...`
-            );
-            if (attempt < maxRetries - 1) {
-              await new Promise((resolve) => setTimeout(resolve, delay));
-              continue;
-            }
-            throw new Error(
-              `Gemini API rate limit exceeded${
-                isFallback ? " on both keys" : ""
-              }. Please wait a few minutes and try again.`
-            );
-          }
-
-          if (!response.ok) {
-            const errorBody = await response.text();
-            // If error with user key and we have fallback, try fallback
-            if (!isFallback && fallbackKey && attempt === 0) {
-              console.log(
-                "⚠️ Error with user's key, switching to app's key..."
-              );
-              throw new Error("SWITCH_TO_FALLBACK");
-            }
-            throw new Error(
-              `API request failed with status ${response.status}: ${errorBody}`
-            );
-          }
-
-          // Success! Log which key was used
-          if (isFallback) {
-            console.log("✓ API call succeeded using app's fallback key");
-          } else if (userApiKey) {
-            console.log("✓ API call succeeded using user's API key");
-          }
-
-          return await response.json();
-        } catch (error) {
-          const errorMsg = (error as Error).message;
-
-          // Handle switch to fallback
-          if (errorMsg === "SWITCH_TO_FALLBACK") {
-            throw error; // Re-throw to outer handler
-          }
-
-          console.error(
-            `Attempt ${attempt + 1} of ${maxRetries} failed:`,
-            errorMsg
-          );
-          if (attempt === maxRetries - 1) {
-            throw new Error(
-              `Failed to connect to Gemini API after ${maxRetries} attempts. ${errorMsg}`
-            );
-          }
-          // For non-429 errors, use shorter delays
-          const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-          console.warn(`Retrying in ${Math.floor(delay / 1000)} seconds...`);
-          await new Promise((resolve) => setTimeout(resolve, delay));
+        if (!result.success) {
+          throw new Error(result.error || "Failed to generate content");
         }
+
+        console.log("✓ API call succeeded via backend proxy");
+        // Return in format expected by existing code
+        return {
+          candidates: [{ content: { parts: [{ text: result.data }] } }],
+        };
+      } catch (error) {
+        console.error(
+          `Attempt ${attempt + 1} failed:`,
+          (error as Error).message
+        );
+        if (attempt === maxRetries - 1) {
+          throw error;
+        }
+        // Exponential backoff
+        const delay = 1000 * Math.pow(2, attempt) + Math.random() * 1000;
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
-    };
-
-    // Try primary key first
-    try {
-      return await tryApiCall(apiKey, false);
-    } catch (error) {
-      const errorMsg = (error as Error).message;
-
-      // If we should switch to fallback
-      if (errorMsg === "SWITCH_TO_FALLBACK" && fallbackKey) {
-        console.log("🔄 Attempting with fallback API key...");
-        return await tryApiCall(fallbackKey, true);
-      }
-
-      // No fallback available or fallback also failed
-      throw error;
     }
   };
 
@@ -335,11 +235,7 @@ Return ONLY the JSON object, no additional text or formatting.`;
 
       const combinedPrompt = `${systemPrompt}\n\nExtract structured data from this resume text:\n\n${resumeText}`;
 
-      const payload = {
-        contents: [{ parts: [{ text: combinedPrompt }] }],
-      };
-
-      const result = await callGeminiAPI(payload);
+      const result = await callGeminiAPI(combinedPrompt);
       const generatedText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
 
       if (generatedText) {
@@ -439,11 +335,7 @@ Return the optimized resume data in the SAME JSON structure as the input. Only m
         2
       )}\n\nJob Description:\n${jobDescription}`;
 
-      const payload = {
-        contents: [{ parts: [{ text: combinedPrompt }] }],
-      };
-
-      const result = await callGeminiAPI(payload);
+      const result = await callGeminiAPI(combinedPrompt);
       const generatedText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
 
       if (generatedText) {
@@ -805,22 +697,10 @@ Return the optimized resume data in the SAME JSON structure as the input. Only m
         {/* API Usage Info */}
         <Alert className="mb-6 bg-blue-50 border-blue-200">
           <AlertDescription className="text-sm text-blue-800">
-            <strong>💡 Smart Features:</strong>
-            {userApiKey ? (
-              <span className="text-green-700 font-semibold">
-                {" "}
-                Using your API key ✓
-              </span>
-            ) : (
-              <span>
-                {" "}
-                Add your own API key in Settings to avoid rate limits.
-              </span>
-            )}{" "}
-            Caching enabled - repeated operations use cached data (no API
-            calls).
-            {usingUserKey &&
-              " Your API key is being used with automatic fallback to app's key if needed."}
+            <strong>💡 Smart Features:</strong> All API calls are securely
+            handled through the backend. Add your own API key in Settings to use
+            your quota and avoid rate limits. Caching enabled - repeated
+            operations use cached data (no API calls).
           </AlertDescription>
         </Alert>
 
