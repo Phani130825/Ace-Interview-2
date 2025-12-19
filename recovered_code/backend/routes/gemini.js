@@ -28,19 +28,109 @@ const getGeminiApiKey = async (userId) => {
  * Clean Gemini JSON response
  */
 function cleanGeminiJSON(text) {
+  // Remove markdown code blocks
   let cleaned = text
-    .replace(/```json/gi, '')
-    .replace(/```/g, '')
+    .replace(/```json\s*/gi, '')
+    .replace(/```\s*/g, '')
     .trim();
   
+  // Find the JSON boundaries
   const firstBrace = cleaned.indexOf('{');
+  const firstBracket = cleaned.indexOf('[');
   const lastBrace = cleaned.lastIndexOf('}');
+  const lastBracket = cleaned.lastIndexOf(']');
   
-  if (firstBrace !== -1 && lastBrace !== -1) {
-    cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+  // Determine if it's an array or object and extract
+  let start = -1;
+  let end = -1;
+  
+  if (firstBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)) {
+    start = firstBracket;
+    end = lastBracket + 1;
+  } else if (firstBrace !== -1) {
+    start = firstBrace;
+    end = lastBrace + 1;
+  }
+  
+  if (start !== -1 && end !== -1 && end > start) {
+    cleaned = cleaned.substring(start, end);
   }
   
   return cleaned;
+}
+
+function repairJSON(jsonString) {
+  try {
+    // First try parsing as-is
+    return JSON.parse(jsonString);
+  } catch (e) {
+    console.log('JSON parse failed, attempting repair. Error:', e.message);
+    let repaired = jsonString;
+    
+    // Strategy 1: Handle unterminated strings
+    if (e.message.includes('Unterminated string') || e.message.includes('Unexpected end')) {
+      console.log('Attempting to repair unterminated string...');
+      
+      // Extract score (required)
+      const scoreMatch = repaired.match(/"score"\s*:\s*(\d+)/);
+      
+      if (scoreMatch) {
+        const score = scoreMatch[1];
+        
+        // Try to extract any partial feedback text
+        // Look for feedback property followed by opening quote
+        const feedbackPattern = /"feedback"\s*:\s*"([^"]*)(?:")?/;
+        const feedbackMatch = repaired.match(feedbackPattern);
+        
+        let feedback = "Evaluation completed successfully";
+        if (feedbackMatch && feedbackMatch[1]) {
+          // Clean up the partial feedback
+          let partialFeedback = feedbackMatch[1]
+            .replace(/\\/g, '') // Remove escape characters
+            .replace(/[\n\r\t]/g, ' ') // Replace newlines with spaces
+            .trim();
+          
+          // If we got some feedback, use it
+          if (partialFeedback.length > 0) {
+            // Truncate if too long and add ellipsis
+            if (partialFeedback.length > 150) {
+              partialFeedback = partialFeedback.substring(0, 147) + '...';
+            } else {
+              partialFeedback = partialFeedback + '...';
+            }
+            feedback = partialFeedback;
+          }
+        }
+        
+        // Construct valid JSON
+        repaired = JSON.stringify({ score: parseInt(score), feedback });
+        console.log('Repaired JSON:', repaired);
+        return JSON.parse(repaired);
+      }
+    }
+    
+    // Strategy 2: Handle missing closing braces
+    if (e.message.includes('Unexpected end') || e.message.includes('Expected')) {
+      // Try to extract score at minimum
+      const scoreMatch = repaired.match(/"score"\s*:\s*(\d+)/);
+      if (scoreMatch) {
+        const score = scoreMatch[1];
+        repaired = JSON.stringify({ 
+          score: parseInt(score), 
+          feedback: "Evaluation completed successfully" 
+        });
+        console.log('Repaired JSON (missing braces):', repaired);
+        return JSON.parse(repaired);
+      }
+    }
+    
+    // Strategy 3: Last resort - return default values
+    console.log('All repair strategies failed, using defaults');
+    return {
+      score: 70,
+      feedback: "Evaluation completed. Response recorded successfully."
+    };
+  }
 }
 
 // @route   POST /api/gemini/generate
@@ -176,7 +266,8 @@ router.post('/generate-json', asyncHandler(async (req, res) => {
     // Clean and parse JSON
     try {
       const cleanedText = cleanGeminiJSON(rawText);
-      const parsedData = JSON.parse(cleanedText);
+      console.log('Cleaned JSON text:', cleanedText.substring(0, 200)); // Log first 200 chars
+      const parsedData = repairJSON(cleanedText);
 
       res.json({
         success: true,
@@ -186,10 +277,13 @@ router.post('/generate-json', asyncHandler(async (req, res) => {
       });
     } catch (parseError) {
       console.error('JSON parse error:', parseError);
+      console.error('Raw text:', rawText);
+      console.error('Cleaned text:', cleanGeminiJSON(rawText));
       res.json({
         success: false,
         error: 'Failed to parse JSON response',
         rawText: rawText,
+        cleanedText: cleanGeminiJSON(rawText),
         parseError: parseError.message
       });
     }

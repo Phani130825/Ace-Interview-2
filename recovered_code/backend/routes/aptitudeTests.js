@@ -10,10 +10,28 @@ router.post('/', auth, async (req, res) => {
     const { questions, score, totalQuestions, percentage, timeTaken } = req.body;
     const userId = req.user?.id || req.body.userId;
 
+    console.log('📝 Saving aptitude test for user:', userId);
+    console.log('📊 Test data:', {
+      totalQuestions,
+      score,
+      percentage,
+      questionsReceived: questions?.length,
+      timeTaken
+    });
+
     if (!userId) {
+      console.error('❌ No userId provided');
       return res.status(400).json({ 
         success: false, 
         message: 'User ID is required' 
+      });
+    }
+
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
+      console.error('❌ Invalid questions data');
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Questions array is required' 
       });
     }
 
@@ -27,6 +45,7 @@ router.post('/', auth, async (req, res) => {
     });
 
     await aptitudeTest.save();
+    console.log('✅ Aptitude test saved successfully with ID:', aptitudeTest._id);
 
     res.status(201).json({
       success: true,
@@ -34,7 +53,7 @@ router.post('/', auth, async (req, res) => {
       data: aptitudeTest
     });
   } catch (error) {
-    console.error('Error saving aptitude test:', error);
+    console.error('❌ Error saving aptitude test:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to save aptitude test',
@@ -48,16 +67,20 @@ router.get('/user/:userId', auth, async (req, res) => {
   try {
     const { userId } = req.params;
     
+    console.log('📖 Fetching aptitude tests for userId:', userId);
+    
     const tests = await AptitudeTest.find({ userId })
       .sort({ timestamp: -1 })
       .lean();
+
+    console.log(`✅ Found ${tests.length} aptitude test(s) for user ${userId}`);
 
     res.json({
       success: true,
       data: tests
     });
   } catch (error) {
-    console.error('Error fetching aptitude tests:', error);
+    console.error('❌ Error fetching aptitude tests:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch aptitude tests',

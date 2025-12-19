@@ -34,14 +34,10 @@ interface Question {
   correctAnswer: string;
 }
 
-interface AptitudeProps {
-  onProceed?: () => void;
-}
-
 /* ============================
    COMPONENT
 ============================ */
-const Aptitude = ({ onProceed }: AptitudeProps) => {
+const Aptitude = () => {
   const [stage, setStage] = useState<
     "initial" | "loading" | "questions" | "results" | "error"
   >("initial");
@@ -156,7 +152,7 @@ Rules:
     setAnswers((prev) => ({ ...prev, [index]: value }));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const timeTaken =
       startTime > 0 ? Math.floor((Date.now() - startTime) / 1000) : 0;
     let calculatedScore = 0;
@@ -179,15 +175,26 @@ Rules:
     const percentage = (calculatedScore / questions.length) * 100;
 
     // Save to MongoDB and local storage
-    saveAptitudeTest({
-      questions: questionResults,
-      score: calculatedScore,
-      totalQuestions: questions.length,
-      percentage,
-      timeTaken,
-    }).catch((error) => {
+    try {
+      console.log(
+        "Saving aptitude test with",
+        questionResults.length,
+        "questions..."
+      );
+      const savedId = await saveAptitudeTest({
+        questions: questionResults,
+        score: calculatedScore,
+        totalQuestions: questions.length,
+        percentage,
+        timeTaken,
+      });
+      console.log("Aptitude test saved successfully with ID:", savedId);
+    } catch (error) {
       console.error("Error saving aptitude test:", error);
-    });
+      alert(
+        "Note: Test results may not be saved. Please check your connection."
+      );
+    }
 
     setScore(calculatedScore);
     setStage("results");
@@ -350,26 +357,21 @@ Rules:
               You scored {score} out of {questions.length}!
             </h2>
 
-            <button
-              onClick={() => {
-                if (onProceed) {
-                  onProceed();
-                } else {
-                  localStorage.setItem("navigateTo", "coding");
-                  window.location.reload();
-                }
-              }}
-              className="mt-4 bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition-transform transform hover:scale-105"
-            >
-              Proceed to Coding Round
-            </button>
+            <div className="flex gap-4 justify-center">
+              <button
+                onClick={handleRetry}
+                className="mt-4 bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition-transform transform hover:scale-105"
+              >
+                Try Again
+              </button>
 
-            <button
-              onClick={handleRetry}
-              className="mt-4 ml-4 bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition-transform transform hover:scale-105"
-            >
-              Try Again
-            </button>
+              <button
+                onClick={handleBackClick}
+                className="mt-4 bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition-transform transform hover:scale-105"
+              >
+                Back to Dashboard
+              </button>
+            </div>
           </div>
         )}
 

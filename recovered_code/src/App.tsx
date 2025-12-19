@@ -11,6 +11,7 @@ import HRInterviewSimulator from "./components/HRInterviewSimulator";
 import TechnicalInterviewSimulator from "./components/TechnicalInterviewSimulator";
 import ResumePDFGenerator from "./components/ResumePDFGenerator";
 import PerformanceReport from "./components/PerformanceReport";
+import PlacementSimulation from "./components/PlacementSimulation";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,14 @@ const App = () => (
             />
             <Route path="/resume-pdf" element={<ResumePDFGenerator />} />
             <Route path="/performance" element={<PerformanceReport />} />
+            <Route
+              path="/placement-simulation"
+              element={
+                <PlacementSimulation
+                  onNavigate={(view) => (window.location.href = `/${view}`)}
+                />
+              }
+            />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

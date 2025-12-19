@@ -335,6 +335,60 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
           </Card>
         </div>
 
+        {/* Complete Placement Simulation */}
+        {user && (
+          <Card className="p-6 mb-8 bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2 flex items-center gap-2">
+                  <Trophy className="h-7 w-7 text-indigo-600" />
+                  Complete Placement Simulation
+                </h2>
+                <p className="text-gray-600">
+                  Experience the entire placement journey from resume to HR
+                  interview with comprehensive analytics
+                </p>
+              </div>
+              <Button
+                variant="hero"
+                size="lg"
+                onClick={() => (window.location.href = "/placement-simulation")}
+                className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+              >
+                Start Simulation
+                <ExternalLink className="h-5 w-5 ml-2" />
+              </Button>
+            </div>
+
+            <div className="grid md:grid-cols-6 gap-4 mt-6">
+              <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-indigo-100">
+                <FileText className="h-5 w-5 text-blue-600" />
+                <span className="text-sm font-medium">Resume</span>
+              </div>
+              <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-indigo-100">
+                <Target className="h-5 w-5 text-purple-600" />
+                <span className="text-sm font-medium">Aptitude</span>
+              </div>
+              <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-indigo-100">
+                <FileText className="h-5 w-5 text-orange-600" />
+                <span className="text-sm font-medium">Coding</span>
+              </div>
+              <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-indigo-100">
+                <Video className="h-5 w-5 text-green-600" />
+                <span className="text-sm font-medium">Technical</span>
+              </div>
+              <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-indigo-100">
+                <Briefcase className="h-5 w-5 text-indigo-600" />
+                <span className="text-sm font-medium">Managerial</span>
+              </div>
+              <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-indigo-100">
+                <Video className="h-5 w-5 text-pink-600" />
+                <span className="text-sm font-medium">HR</span>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* All Modules */}
         {user && (
           <Card className="p-6 mb-8">

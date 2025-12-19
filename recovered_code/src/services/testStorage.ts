@@ -53,6 +53,36 @@ export interface InterviewSession {
   status: 'completed' | 'in-progress' | 'early-exit';
 }
 
+export interface PlacementSimulationResult {
+  id: string;
+  timestamp: number;
+  status: 'completed' | 'in-progress' | 'abandoned';
+  overallScore: number;
+  totalTimeTaken: number;
+  isSelected: boolean;
+  aptitude?: {
+    score: number;
+    totalQuestions: number;
+    correctAnswers: number;
+  };
+  coding?: {
+    score: number;
+    questionTitle: string;
+  };
+  technicalInterview?: {
+    score: number;
+    feedback: string;
+  };
+  managerialInterview?: {
+    score: number;
+    feedback: string;
+  };
+  hrInterview?: {
+    score: number;
+    feedback: string;
+  };
+}
+
 const STORAGE_KEYS = {
   APTITUDE_TESTS: 'ace_interview_aptitude_tests',
   CODING_TESTS: 'ace_interview_coding_tests',
@@ -72,23 +102,39 @@ const generateId = (): string => {
 // Aptitude Test Storage
 export const saveAptitudeTest = async (result: Omit<AptitudeTestResult, 'id' | 'timestamp'>): Promise<string> => {
   const userId = getUserId();
+  
+  if (!userId) {
+    console.error('No userId found. User may not be logged in.');
+    throw new Error('User not authenticated. Please log in.');
+  }
+  
   const newTest: AptitudeTestResult = {
     ...result,
     id: generateId(),
     timestamp: Date.now(),
   };
 
+  console.log('Saving aptitude test for userId:', userId);
+  console.log('Test data:', {
+    totalQuestions: result.totalQuestions,
+    score: result.score,
+    percentage: result.percentage,
+    questionsCount: result.questions.length
+  });
+
   // Save to localStorage first (for offline support)
   try {
     const tests = getAptitudeTestsFromLocalStorage();
     tests.push(newTest);
     localStorage.setItem(STORAGE_KEYS.APTITUDE_TESTS, JSON.stringify(tests));
+    console.log('Saved to localStorage successfully');
   } catch (error) {
     console.error('Error saving to localStorage:', error);
   }
 
   // Save to MongoDB
   try {
+    console.log('Attempting to save to MongoDB...');
     const response = await api.post('/aptitude-tests', {
       userId,
       questions: result.questions,
@@ -98,11 +144,19 @@ export const saveAptitudeTest = async (result: Omit<AptitudeTestResult, 'id' | '
       timeTaken: result.timeTaken,
     });
     
+    console.log('MongoDB save response:', response.data);
+    
     if (response.data.success) {
+      console.log('Successfully saved to MongoDB with ID:', response.data.data._id);
       return response.data.data._id;
     }
-  } catch (error) {
-    console.warn('Failed to save to MongoDB, using localStorage only:', error);
+  } catch (error: any) {
+    console.error('Failed to save to MongoDB:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+    console.warn('Using localStorage ID only');
   }
 
   return newTest.id;
@@ -334,11 +388,68 @@ export const getInterviewSessionsByType = async (type: InterviewSession['intervi
   return sessions.filter(session => session.interviewType === type);
 };
 
+// Placement Simulation Storage
+export const getPlacementSimulations = async (): Promise<PlacementSimulationResult[]> => {
+  const userId = getUserId();
+  
+  if (!userId) {
+    return [];
+  }
+  
+  try {
+    const response = await api.get(`/placement-simulation/history`);
+    if (response.data.success && response.data.data) {
+      const simulations = response.data.data.map((sim: any) => ({
+        id: sim._id,
+        timestamp: new Date(sim.createdAt).getTime(),
+        status: sim.status,
+        overallScore: sim.overallScore || 0,
+        totalTimeTaken: sim.totalTimeTaken || 0,
+        isSelected: (sim.overallScore || 0) >= 70,
+        aptitude: sim.aptitude?.completed ? {
+          score: sim.aptitude.score || 0,
+          totalQuestions: sim.aptitude.totalQuestions || 0,
+          correctAnswers: sim.aptitude.correctAnswers || 0,
+        } : undefined,
+        coding: sim.coding?.completed ? {
+          score: sim.coding.score || 0,
+          questionTitle: sim.coding.questionTitle || '',
+        } : undefined,
+        technicalInterview: sim.technicalInterview?.completed ? {
+          score: sim.technicalInterview.score || 0,
+          feedback: sim.technicalInterview.feedback || '',
+        } : undefined,
+        managerialInterview: sim.managerialInterview?.completed ? {
+          score: sim.managerialInterview.score || 0,
+          feedback: sim.managerialInterview.feedback || '',
+        } : undefined,
+        hrInterview: sim.hrInterview?.completed ? {
+          score: sim.hrInterview.score || 0,
+          feedback: sim.hrInterview.feedback || '',
+        } : undefined,
+      }));
+      return simulations;
+    }
+  } catch (error) {
+    console.warn('Failed to fetch placement simulations:', error);
+  }
+  
+  return [];
+};
+
+export const getLatestPlacementSimulation = async (): Promise<PlacementSimulationResult | null> => {
+  const simulations = await getPlacementSimulations();
+  if (simulations.length === 0) return null;
+  return simulations.sort((a, b) => b.timestamp - a.timestamp)[0];
+};
+
 // Analytics & Reporting
 export const getPerformanceStats = async () => {
   const aptitudeTests = await getAptitudeTests();
   const codingTests = getCodingTests();
   const interviewSessions = await getInterviewSessions();
+  const placementSimulations = await getPlacementSimulations();
+  const completedSimulations = placementSimulations.filter(s => s.status === 'completed');
 
   return {
     aptitude: {
@@ -364,6 +475,14 @@ export const getPerformanceStats = async () => {
         ai: (await getInterviewSessionsByType('ai')).length,
       },
       lastSession: await getLatestInterviewSession(),
+    },
+    placementSimulations: {
+      total: completedSimulations.length,
+      selected: completedSimulations.filter(s => s.isSelected).length,
+      averageScore: completedSimulations.length > 0
+        ? completedSimulations.reduce((sum, sim) => sum + sim.overallScore, 0) / completedSimulations.length
+        : 0,
+      lastSimulation: await getLatestPlacementSimulation(),
     },
   };
 };

@@ -109,7 +109,7 @@ const PerformanceReport = () => {
         </div>
 
         {/* Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-gray-600">
@@ -171,6 +171,30 @@ const PerformanceReport = () => {
                   </div>
                 </div>
                 <MessageSquare className="h-10 w-10 text-purple-500" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-green-50 to-emerald-50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-gray-600">
+                Placement Simulations
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-3xl font-bold text-green-700">
+                    {stats.placementSimulations?.selected || 0}/
+                    {stats.placementSimulations?.total || 0}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Avg:{" "}
+                    {(stats.placementSimulations?.averageScore || 0).toFixed(1)}
+                    %
+                  </p>
+                </div>
+                <TrendingUp className="h-10 w-10 text-green-600" />
               </div>
             </CardContent>
           </Card>

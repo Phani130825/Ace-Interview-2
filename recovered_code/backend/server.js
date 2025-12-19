@@ -28,6 +28,7 @@ import aptitudeTestsRoutes from './routes/aptitudeTests.js';
 import interviewSessionsRoutes from './routes/interviewSessions.js';
 import scheduleRoutes from './routes/schedules.js';
 import apiKeysRoutes from './routes/apiKeys.js';
+import placementSimulationRoutes from './routes/placementSimulation.js';
 
 // Import middleware
 import { authenticateToken } from './middleware/auth.js';
@@ -105,6 +106,7 @@ app.use('/api/aptitude-tests', authenticateToken, aptitudeTestsRoutes);
 app.use('/api/interview-sessions', authenticateToken, interviewSessionsRoutes);
 app.use('/api/schedules', authenticateToken, scheduleRoutes);
 app.use('/api/api-keys', authenticateToken, apiKeysRoutes);
+app.use('/api/placement-simulation', authenticateToken, placementSimulationRoutes);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
