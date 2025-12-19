@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import axios from 'axios';
 import dotenv from 'dotenv';
+import User from '../models/User.js';
 
 dotenv.config();
 
@@ -56,6 +57,47 @@ class AIService {
   // Check if AI service is available
   checkAvailability() {
     return this.isAvailable;
+  }
+
+  // Get Gemini API key for a user - ALWAYS fetch from DB (no caching)
+  async getGeminiApiKey(userId) {
+    try {
+      if (!userId) {
+        console.log('No userId provided, using environment Gemini API key');
+        return process.env.GEMINI_API_KEY || null;
+      }
+
+      // ALWAYS fetch from database - NO CACHING
+      const user = await User.findById(userId);
+      
+      if (!user) {
+        console.warn(`User ${userId} not found, using environment Gemini API key`);
+        return process.env.GEMINI_API_KEY || null;
+      }
+
+      // Try to get user's decrypted API key
+      const userApiKey = user.getApiKey('gemini');
+      
+      if (userApiKey) {
+        console.log(`Using user's Gemini API key for user ${userId}`);
+        
+        // Update last used timestamp
+        if (user.apiKeys.gemini) {
+          user.apiKeys.gemini.lastUsed = new Date();
+          await user.save();
+        }
+        
+        return userApiKey;
+      }
+
+      // Fallback to environment variable
+      console.log(`User ${userId} has no Gemini API key, using environment key`);
+      return process.env.GEMINI_API_KEY || null;
+    } catch (error) {
+      console.error('Error fetching Gemini API key:', error);
+      // Fallback to environment variable on error
+      return process.env.GEMINI_API_KEY || null;
+    }
   }
 
   // Extract structured data from resume text using LLM RAG

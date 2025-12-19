@@ -78,6 +78,7 @@ const App = ({ onProceed }: CodingRoundProps) => {
   const [modalMessage, setModalMessage] = useState(null);
   const [showBackConfirm, setShowBackConfirm] = useState(false);
   const [isEditorReady, setIsEditorReady] = useState(false);
+  const [hasGeneratedQuestion, setHasGeneratedQuestion] = useState(false);
   const monacoEditorRef = useRef(null);
   const lastGenerationTime = useRef(0);
   const lastApiCallTime = useRef(0);
@@ -338,6 +339,14 @@ int main() {
   };
 
   const handleGenerateQuestion = async () => {
+    // Check if question has already been generated
+    if (hasGeneratedQuestion) {
+      setApiError(
+        "You can only generate one question per session. Please complete this question first."
+      );
+      return;
+    }
+
     // Rate limiting: 10 seconds between generations
     const now = Date.now();
     if (now - lastGenerationTime.current < 10000) {
@@ -648,6 +657,7 @@ RESPOND WITH ONLY THE JSON OBJECT - NO EXPLANATIONS, NO MARKDOWN, NO CODE BLOCKS
 
       console.log("✓ Question validation passed");
       setQuestion(generatedQuestion);
+      setHasGeneratedQuestion(true);
       if (isEditorReady && monacoEditorRef.current) {
         const boilerplate =
           generatedQuestion.boilerplateCode[language].functionSignature;
@@ -992,10 +1002,10 @@ RESPOND WITH ONLY THE JSON OBJECT - NO EXPLANATIONS, NO MARKDOWN, NO CODE BLOCKS
               </h2>
               <button
                 onClick={handleGenerateQuestion}
-                disabled={isLoading}
+                disabled={isLoading || hasGeneratedQuestion}
                 className={`flex items-center gap-2 py-2 px-4 rounded-full font-semibold transition-colors ${
-                  isLoading
-                    ? "bg-blue-800 text-gray-400 cursor-not-allowed"
+                  isLoading || hasGeneratedQuestion
+                    ? "bg-gray-700 text-gray-500 cursor-not-allowed"
                     : "bg-blue-600 hover:bg-blue-700 text-white animate-pulse-bg"
                 }`}
               >
@@ -1003,6 +1013,11 @@ RESPOND WITH ONLY THE JSON OBJECT - NO EXPLANATIONS, NO MARKDOWN, NO CODE BLOCKS
                   <>
                     <Loader className="w-4 h-4 animate-spin" />
                     Generating...
+                  </>
+                ) : hasGeneratedQuestion ? (
+                  <>
+                    Question Generated
+                    <CheckCircle className="w-4 h-4" />
                   </>
                 ) : (
                   <>
