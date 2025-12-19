@@ -26,6 +26,7 @@ import judge0Routes from './routes/judge0.js';
 import submissionsRoutes from './routes/submissions.js';
 import aptitudeTestsRoutes from './routes/aptitudeTests.js';
 import interviewSessionsRoutes from './routes/interviewSessions.js';
+import scheduleRoutes from './routes/schedules.js';
 
 // Import middleware
 import { authenticateToken } from './middleware/auth.js';
@@ -101,6 +102,7 @@ app.use('/api/judge0', authenticateToken, judge0Routes);
 app.use('/api/submissions', authenticateToken, submissionsRoutes);
 app.use('/api/aptitude-tests', authenticateToken, aptitudeTestsRoutes);
 app.use('/api/interview-sessions', authenticateToken, interviewSessionsRoutes);
+app.use('/api/schedules', authenticateToken, scheduleRoutes);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
