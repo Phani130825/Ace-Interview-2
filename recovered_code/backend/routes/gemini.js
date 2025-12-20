@@ -14,13 +14,18 @@ const APP_GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI
  */
 const getGeminiApiKey = async (userId) => {
   try {
-    const user = await User.findById(userId).select('+apiKeys.gemini');
-    if (user?.apiKeys?.gemini) {
-      return user.apiKeys.gemini;
+    const user = await User.findById(userId);
+    if (user?.hasApiKey('gemini')) {
+      const decryptedKey = user.getApiKey('gemini');
+      if (decryptedKey) {
+        console.log('Using user\'s Gemini API key');
+        return decryptedKey;
+      }
     }
   } catch (error) {
     console.error('Error fetching user API key:', error);
   }
+  console.log('Using app\'s Gemini API key');
   return APP_GEMINI_API_KEY;
 };
 
@@ -155,6 +160,9 @@ router.post('/generate', asyncHandler(async (req, res) => {
     });
   }
 
+  // Debug log (mask the key for security)
+  console.log('Using Gemini API key:', apiKey ? `${apiKey.substring(0, 10)}...${apiKey.substring(apiKey.length - 4)}` : 'null');
+
   const apiUrl = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
 
   try {
@@ -186,9 +194,21 @@ router.post('/generate', asyncHandler(async (req, res) => {
 
     const data = await response.json();
 
+    // Extract the text content from Gemini response
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!text) {
+      return res.status(500).json({
+        success: false,
+        error: 'Empty response from Gemini',
+        rawResponse: data
+      });
+    }
+
     res.json({
       success: true,
-      data: data
+      data: text, // Return just the text string
+      rawResponse: data // Include full response for debugging if needed
     });
   } catch (error) {
     console.error('Gemini API call error:', error);

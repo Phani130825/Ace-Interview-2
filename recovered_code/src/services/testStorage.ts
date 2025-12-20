@@ -276,7 +276,12 @@ export const saveInterviewSession = async (session: Omit<InterviewSession, 'id' 
     console.error('Error saving to localStorage:', error);
   }
 
-  // Save to MongoDB
+  // Save to MongoDB if user is authenticated
+  if (!userId) {
+    console.warn('No userId found. Skipping MongoDB save. Session saved to localStorage only.');
+    return newSession.id;
+  }
+
   try {
     const response = await api.post('/interview-sessions', {
       userId,
@@ -293,8 +298,9 @@ export const saveInterviewSession = async (session: Omit<InterviewSession, 'id' 
     if (response.data.success) {
       return response.data.data._id;
     }
-  } catch (error) {
-    console.warn('Failed to save interview session to MongoDB:', error);
+  } catch (error: any) {
+    // Log error details but don't throw - we have localStorage backup
+    console.warn('Failed to save interview session to MongoDB:', error.response?.data || error.message);
   }
 
   return newSession.id;

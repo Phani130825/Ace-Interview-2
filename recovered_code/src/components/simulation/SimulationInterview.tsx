@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Mic, MicOff, ArrowRight, Loader2 } from "lucide-react";
+import { Mic, MicOff, ArrowRight, Loader2, Volume2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import api from "@/services/api";
 import { generateJSON } from "@/services/geminiService";
 
@@ -31,6 +32,11 @@ const SimulationInterview = ({
   const [score, setScore] = useState(0);
   const [feedback, setFeedback] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  const speechRecognitionRef = useRef<any>(null);
+  const { toast } = useToast();
 
   const interviewConfig = {
     technical: {
@@ -54,6 +60,106 @@ const SimulationInterview = ({
   };
 
   const config = interviewConfig[interviewType];
+
+  // Speech Recognition Setup
+  useEffect(() => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.error("Web Speech API is not supported in this browser.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      console.log("Speech recognition started");
+      setIsListening(true);
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setAnswer((prev) => prev + (prev ? " " : "") + transcript);
+      console.log("Speech recognized:", transcript);
+      setIsListening(false);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error:", event.error);
+      setIsListening(false);
+      toast({
+        title: "Speech Recognition Error",
+        description: "Could not recognize speech. Please try again.",
+        variant: "destructive",
+      });
+    };
+
+    recognition.onend = () => {
+      console.log("Speech recognition ended");
+      setIsListening(false);
+    };
+
+    speechRecognitionRef.current = recognition;
+
+    return () => {
+      if (speechRecognitionRef.current) {
+        speechRecognitionRef.current.stop();
+      }
+      // Cancel any ongoing speech synthesis
+      if ("speechSynthesis" in window) {
+        speechSynthesis.cancel();
+      }
+    };
+  }, [toast]);
+
+  // Text-to-Speech Helper
+  const speakText = (text: string) => {
+    if (!("speechSynthesis" in window)) {
+      console.warn("Speech synthesis not supported in this browser");
+      return;
+    }
+
+    // Cancel any ongoing speech
+    speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.9; // Slightly slower for clarity
+    utterance.pitch = 1;
+    utterance.volume = 0.8;
+
+    utterance.onstart = () => {
+      console.log("Speech started");
+      setIsSpeaking(true);
+    };
+
+    utterance.onend = () => {
+      console.log("Speech ended");
+      setIsSpeaking(false);
+    };
+
+    utterance.onerror = (event) => {
+      console.error("Speech synthesis error:", event.error);
+      setIsSpeaking(false);
+    };
+
+    speechSynthesis.speak(utterance);
+  };
+
+  // Speak question when it changes
+  useEffect(() => {
+    if (interviewStarted && !interviewComplete && questions.length > 0) {
+      // Small delay to ensure UI is updated
+      const timer = setTimeout(() => {
+        speakText(questions[currentQuestion]);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [currentQuestion, interviewStarted, interviewComplete, questions]);
 
   const startInterview = async () => {
     setLoading(true);
@@ -218,8 +324,42 @@ Keep feedback under 80 characters. Use simple words only.`;
   };
 
   const toggleRecording = () => {
-    setIsRecording(!isRecording);
-    // In a real app, integrate with speech recognition API
+    if (!speechRecognitionRef.current) {
+      toast({
+        title: "Speech Recognition Unavailable",
+        description: "Your browser doesn't support speech recognition.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isListening) {
+      speechRecognitionRef.current.stop();
+      setIsRecording(false);
+    } else {
+      try {
+        speechRecognitionRef.current.start();
+        setIsRecording(true);
+        toast({
+          title: "Listening...",
+          description: "Speak your answer clearly.",
+        });
+      } catch (error) {
+        console.error("Error starting speech recognition:", error);
+        toast({
+          title: "Error",
+          description: "Failed to start voice input.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const stopSpeaking = () => {
+    if ("speechSynthesis" in window) {
+      speechSynthesis.cancel();
+      setIsSpeaking(false);
+    }
   };
 
   if (!interviewStarted) {
@@ -321,9 +461,26 @@ Keep feedback under 80 characters. Use simple words only.`;
             </div>
           </div>
 
-          <h3 className="text-xl font-semibold text-gray-900 mb-6">
-            {questions[currentQuestion]}
-          </h3>
+          <div className="mb-6">
+            <div className="flex items-start justify-between gap-4">
+              <h3 className="text-xl font-semibold text-gray-900 flex-1">
+                {questions[currentQuestion]}
+              </h3>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  isSpeaking
+                    ? stopSpeaking()
+                    : speakText(questions[currentQuestion])
+                }
+                disabled={loading}
+              >
+                <Volume2 className="h-4 w-4 mr-2" />
+                {isSpeaking ? "Stop" : "Read Question"}
+              </Button>
+            </div>
+          </div>
 
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
@@ -331,14 +488,15 @@ Keep feedback under 80 characters. Use simple words only.`;
                 Your Answer:
               </label>
               <Button
-                variant={isRecording ? "destructive" : "outline"}
+                variant={isListening ? "destructive" : "outline"}
                 size="sm"
                 onClick={toggleRecording}
+                disabled={loading}
               >
-                {isRecording ? (
+                {isListening ? (
                   <>
                     <MicOff className="h-4 w-4 mr-2" />
-                    Stop Recording
+                    {isRecording ? "Stop Recording" : "Listening..."}
                   </>
                 ) : (
                   <>

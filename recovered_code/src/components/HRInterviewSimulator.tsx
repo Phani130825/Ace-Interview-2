@@ -244,9 +244,13 @@ Start with a welcoming introduction and your first question.`;
         throw new Error(result.error || "Failed to generate interview content");
       }
 
+      // Extract text from Gemini response - backend now returns text directly
       const text =
-        result.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-        "I could not generate a response. Please try again.";
+        typeof result.data === "string"
+          ? result.data
+          : result.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+            result.data?.text ||
+            "I could not generate a response. Please try again.";
 
       const initialLog: LogEntry[] = [
         {
@@ -370,8 +374,12 @@ As Jennifer Hayes, acknowledge their thanks professionally and provide HR-focuse
 
         if (feedbackResult.success) {
           const feedbackText =
-            feedbackResult.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-            "Thank you for your time. We appreciate your interest and wish you the best!";
+            typeof feedbackResult.data === "string"
+              ? feedbackResult.data
+              : feedbackResult.data?.candidates?.[0]?.content?.parts?.[0]
+                  ?.text ||
+                feedbackResult.data?.text ||
+                "Thank you for your time. We appreciate your interest and wish you the best!";
 
           const feedbackLogEntry: LogEntry = {
             speaker: "Feedback",
@@ -478,8 +486,11 @@ Provide detailed feedback as Jennifer Hayes covering:
         }
 
         const feedbackText =
-          feedbackResult.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-          "Unable to generate feedback.";
+          typeof feedbackResult.data === "string"
+            ? feedbackResult.data
+            : feedbackResult.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+              feedbackResult.data?.text ||
+              "Unable to generate feedback.";
 
         const feedbackLogEntry: LogEntry = {
           speaker: "Feedback",
@@ -548,8 +559,11 @@ Ask one clear, empathetic question:`;
         }
 
         const nextQuestion =
-          questionResult.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-          "What are your career goals?";
+          typeof questionResult.data === "string"
+            ? questionResult.data
+            : questionResult.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+              questionResult.data?.text ||
+              "What are your career goals?";
 
         // Add interviewer's question to log
         const interviewerLogEntry: LogEntry = {

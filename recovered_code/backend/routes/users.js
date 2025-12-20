@@ -219,11 +219,18 @@ router.put('/api-keys/gemini', asyncHandler(async (req, res) => {
     });
   }
 
-  // Update user's Gemini API key
+  // Update user's Gemini API key using the model method
   const user = await User.findById(req.user._id);
-  user.apiKeys = user.apiKeys || {};
-  user.apiKeys.gemini = apiKey.trim();
-  await user.save();
+  
+  try {
+    user.setApiKey('gemini', apiKey.trim());
+    await user.save();
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      error: error.message || 'Failed to save API key'
+    });
+  }
 
   res.json({
     success: true,
@@ -235,19 +242,27 @@ router.put('/api-keys/gemini', asyncHandler(async (req, res) => {
 // @desc    Get user's Gemini API key (masked)
 // @access  Private
 router.get('/api-keys/gemini', asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id).select('+apiKeys.gemini');
+  const user = await User.findById(req.user._id);
   
-  const hasKey = !!(user.apiKeys && user.apiKeys.gemini);
-  const maskedKey = hasKey 
-    ? `${user.apiKeys.gemini.substring(0, 8)}...${user.apiKeys.gemini.substring(user.apiKeys.gemini.length - 4)}`
-    : null;
+  const hasKey = user.hasApiKey('gemini');
+  let maskedKey = null;
+  let fullKey = null;
+  
+  if (hasKey) {
+    fullKey = user.getApiKey('gemini');
+    if (fullKey && fullKey.length > 12) {
+      maskedKey = `${fullKey.substring(0, 8)}...${fullKey.substring(fullKey.length - 4)}`;
+    } else if (fullKey) {
+      maskedKey = fullKey.substring(0, 4) + '...';
+    }
+  }
 
   res.json({
     success: true,
     data: {
       hasKey,
       maskedKey,
-      apiKey: user.apiKeys?.gemini || null // Send full key for actual use
+      apiKey: fullKey // Send full key for actual use
     }
   });
 }));
@@ -257,9 +272,7 @@ router.get('/api-keys/gemini', asyncHandler(async (req, res) => {
 // @access  Private
 router.delete('/api-keys/gemini', asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
-  if (user.apiKeys) {
-    user.apiKeys.gemini = null;
-  }
+  await user.removeApiKey('gemini');
   await user.save();
 
   res.json({

@@ -246,8 +246,13 @@ Start with a professional introduction and your first strategic question.`;
         throw new Error(result.error || "Failed to generate content");
       }
 
+      // Extract text from Gemini response - backend now returns text directly
       const text =
-        result.data || "I could not generate a response. Please try again.";
+        typeof result.data === "string"
+          ? result.data
+          : result.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+            result.data?.text ||
+            "I could not generate a response. Please try again.";
 
       const initialChatHistory = [
         { role: "user", parts: [{ text: introPrompt }] },
@@ -376,8 +381,12 @@ As Robert Martinez, acknowledge professionally and provide strategic feedback co
 
         if (feedbackResult.success) {
           const feedbackText =
-            feedbackResult.data ||
-            "Thank you for your time. We'll be in touch regarding next steps.";
+            typeof feedbackResult.data === "string"
+              ? feedbackResult.data
+              : feedbackResult.data?.candidates?.[0]?.content?.parts?.[0]
+                  ?.text ||
+                feedbackResult.data?.text ||
+                "Thank you for your time. We'll be in touch regarding next steps.";
 
           const feedbackLogEntry: LogEntry = {
             speaker: "Feedback",
@@ -486,7 +495,11 @@ Provide detailed feedback as Robert Martinez covering:
         }
 
         const feedbackText =
-          feedbackResult.data || "Unable to generate feedback.";
+          typeof feedbackResult.data === "string"
+            ? feedbackResult.data
+            : feedbackResult.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+              feedbackResult.data?.text ||
+              "Unable to generate feedback.";
 
         const feedbackLogEntry: LogEntry = {
           speaker: "Feedback",
@@ -556,7 +569,11 @@ Ask one clear, strategic question:`;
         }
 
         const nextQuestion =
-          questionResult.data || "What are your career goals?";
+          typeof questionResult.data === "string"
+            ? questionResult.data
+            : questionResult.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+              questionResult.data?.text ||
+              "What are your career goals?";
 
         // Add interviewer's question to log
         const interviewerLogEntry: LogEntry = {
