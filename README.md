@@ -1,4 +1,4 @@
-# 🎯 InterviewAI - AI-Powered Interview Preparation Platform
+# InterviewAI - AI-Powered Interview Preparation Platform
 
 > A comprehensive, production-ready AI interview preparation platform featuring multi-agent systems, real-time simulations, and intelligent feedback mechanisms.
 
@@ -10,7 +10,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Features](#-features)
 - [Architecture](#-architecture)
@@ -24,9 +24,9 @@
 
 ---
 
-## ✨ Features
+## Features
 
-### 🎤 Interview Simulations
+### Interview Simulations
 
 - **Technical Interviews** - DSA, system design, code reviews
 - **HR Interviews** - Behavioral questions, culture fit
@@ -35,7 +35,7 @@
 - **Coding Rounds** - Live code editor with Monaco (VS Code-like)
 - **Group Discussions** - Multi-AI agent collaborative discussions
 
-### 🤖 AI-Powered Intelligence
+### AI-Powered Intelligence
 
 - **Speech Recognition** - Real-time voice-to-text
 - **Text-to-Speech** - Natural AI interviewer responses
@@ -44,7 +44,7 @@
 - **Multi-Agent System** - 3 Phase implementation with 9+ AI agents
 - **Adaptive Difficulty** - Dynamic question difficulty adjustment
 
-### 📊 Analytics & Tracking
+### Analytics & Tracking
 
 - **Performance Dashboard** - Comprehensive progress tracking
 - **Score Breakdowns** - Detailed performance metrics
@@ -52,7 +52,7 @@
 - **Session History** - Complete interview history
 - **Progress Reports** - Visual performance analytics
 
-### 🎨 Modern UI/UX
+### Modern UI/UX
 
 - **Responsive Design** - Mobile, tablet, desktop optimized
 - **Dark Mode Support** - Theme switching capability
@@ -62,7 +62,7 @@
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ### System Overview
 
@@ -220,7 +220,7 @@ Client                    Server                    AI Agents
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ### Frontend
 
@@ -275,7 +275,7 @@ Client                    Server                    AI Agents
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -358,7 +358,7 @@ npm run dev
 http://localhost:5173
 ```
 
-🎉 **You're ready to go!**
+**You're ready to go!**
 
 ---
 
@@ -434,7 +434,7 @@ recovered_code/
 
 ---
 
-## 🤖 AI Agents System
+## AI Agents System
 
 ### Phase 1: Core Interview System (3 Agents)
 
@@ -611,7 +611,7 @@ GET  /api/discussions/agents/available
 
 ---
 
-## 🧪 Development
+## Development
 
 ### Available Scripts
 
@@ -657,7 +657,7 @@ NODE_ENV=development
 
 ---
 
-## 🌐 Deployment
+## Deployment
 
 ### Frontend Deployment (Vercel/Netlify)
 
@@ -710,7 +710,7 @@ vercel --prod
 
 ---
 
-## 📊 Performance Metrics
+## Performance Metrics
 
 | Metric            | Target  | Status |
 | ----------------- | ------- | ------ |
@@ -722,7 +722,7 @@ vercel --prod
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! Please follow these guidelines:
 
@@ -753,13 +753,13 @@ We welcome contributions! Please follow these guidelines:
 
 ---
 
-## 📝 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Google Gemini AI](https://ai.google.dev/) for AI capabilities
 - [shadcn/ui](https://ui.shadcn.com/) for beautiful components
@@ -768,15 +768,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 📞 Support
+## Support
 
-- 📧 Email: support@interviewai.com
-- 🐛 Issues: [GitHub Issues](../../issues)
-- 💬 Discussions: [GitHub Discussions](../../discussions)
+- Issues: [GitHub Issues](../../issues)
+- Discussions: [GitHub Discussions](../../discussions)
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
 - [ ] Video interview simulations
 - [ ] More AI models integration (GPT-4, Claude)
@@ -790,7 +789,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
 
-**Built with ❤️ by the InterviewAI Team**
+**Built by the InterviewAI Team**
 
 [⬆ back to top](#-interviewai---ai-powered-interview-preparation-platform)
 
