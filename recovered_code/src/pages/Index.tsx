@@ -18,6 +18,7 @@ import PipelineDashboard from "@/components/PipelineDashboard";
 import ResumeLatexGenerator from "@/components/ResumeLatexGenerator";
 import ResumePDFGenerator from "@/components/ResumePDFGenerator";
 import AllSessions from "@/components/AllSessions";
+import GroupDiscussion from "@/components/GroupDiscussion";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -37,13 +38,14 @@ type AppView =
   | "register"
   | "pipelines"
   | "resume-pdf"
-  | "performance";
+  | "performance"
+  | "group-discussion";
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<AppView>("landing");
   const [activeResumeId, setActiveResumeId] = useState<string | null>(null);
   const [activeInterviewId, setActiveInterviewId] = useState<string | null>(
-    null
+    null,
   );
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -169,13 +171,7 @@ const Index = () => {
             ? window.localStorage.getItem("navResumeId")
             : null;
         if (navId && !activeResumeId) setActiveResumeId(navId);
-        return (
-          <Aptitude
-            onProceed={() => {
-              handleNavigate("coding");
-            }}
-          />
-        );
+        return <Aptitude />;
       }
       case "coding": {
         // pick up resumeId from localStorage if present
@@ -222,6 +218,8 @@ const Index = () => {
         return <PerformanceReport />;
       case "pipelines":
         return <PipelineDashboard />;
+      case "group-discussion":
+        return <GroupDiscussion />;
       default:
         return (
           <div className="min-h-screen bg-white">
@@ -312,6 +310,21 @@ const Index = () => {
                       <div className="font-semibold">Interview Sim</div>
                       <div className="text-sm opacity-75">
                         Practice Sessions
+                      </div>
+                    </div>
+                  </Button>
+
+                  <Button
+                    variant="professional"
+                    size="lg"
+                    onClick={() => handleNavigate("group-discussion")}
+                    className="h-auto p-6 flex-col gap-3 text-center"
+                  >
+                    <div className="text-2xl">👥</div>
+                    <div>
+                      <div className="font-semibold">Group Discussion</div>
+                      <div className="text-sm opacity-75">
+                        Multi-Agent Insights
                       </div>
                     </div>
                   </Button>

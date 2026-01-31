@@ -29,6 +29,11 @@ import interviewSessionsRoutes from './routes/interviewSessions.js';
 import scheduleRoutes from './routes/schedules.js';
 import apiKeysRoutes from './routes/apiKeys.js';
 import placementSimulationRoutes from './routes/placementSimulation.js';
+import agentRoutes from './routes/agents.js';
+import groupDiscussionRoutes from './routes/groupDiscussions.js';
+
+// Import WebSocket handlers
+import { initializeGroupDiscussionSocket } from './sockets/groupDiscussionSocket.js';
 
 // Import middleware
 import { authenticateToken } from './middleware/auth.js';
@@ -107,8 +112,11 @@ app.use('/api/interview-sessions', authenticateToken, interviewSessionsRoutes);
 app.use('/api/schedules', authenticateToken, scheduleRoutes);
 app.use('/api/api-keys', authenticateToken, apiKeysRoutes);
 app.use('/api/placement-simulation', authenticateToken, placementSimulationRoutes);
+app.use('/api/agents', authenticateToken, agentRoutes);
+app.use('/api/discussions', authenticateToken, groupDiscussionRoutes);
 
-// Socket.IO connection handling
+// Initialize WebSocket handlers
+initializeGroupDiscussionSocket(io);
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 

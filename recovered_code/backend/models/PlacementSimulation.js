@@ -45,7 +45,21 @@ const placementSimulationSchema = new mongoose.Schema({
     score: { type: Number, default: 0 },
     completed: { type: Boolean, default: false },
     completedAt: Date,
-    timeTaken: Number
+    timeTaken: Number,
+    // AI Evaluator analysis
+    codeQuality: {
+      score: { type: Number, default: 0 },
+      readability: { type: Number, default: 0 },
+      maintainability: { type: Number, default: 0 }
+    },
+    logicCorrect: { type: Boolean, default: false },
+    edgeCasesHandled: [String],
+    edgeCasesMissing: [String],
+    timeComplexity: String,
+    spaceComplexity: String,
+    topicsIdentified: [String],
+    strengthAreas: [String],
+    weakAreas: [String]
   },
   // Step 3: Technical Interview
   technicalInterview: {
@@ -55,7 +69,22 @@ const placementSimulationSchema = new mongoose.Schema({
     feedback: String,
     completed: { type: Boolean, default: false },
     completedAt: Date,
-    duration: Number
+    duration: Number,
+    // AI Interviewer analysis
+    topicsCovered: [String],
+    strongTopics: [String],
+    weakTopics: [String],
+    adaptiveDifficulty: {
+      initialDifficulty: { type: String, default: 'medium' },
+      finalDifficulty: String,
+      difficultyProgression: [String]
+    },
+    questionAnalysis: [{
+      question: String,
+      score: Number,
+      topic: String,
+      difficulty: String
+    }]
   },
   // Step 4: Managerial Interview
   managerialInterview: {
@@ -75,7 +104,60 @@ const placementSimulationSchema = new mongoose.Schema({
     feedback: String,
     completed: { type: Boolean, default: false },
     completedAt: Date,
-    duration: Number
+    duration: Number,
+    // HR Behavior analysis
+    communicationScore: { type: Number, default: 0 },
+    confidenceLevel: { type: Number, default: 0 },
+    redFlags: [String],
+    greenFlags: [String],
+    competenciesDemonstrated: [String],
+    cultureAlignment: { type: Number, default: 0 },
+    responseAnalysis: [{
+      question: String,
+      score: Number,
+      category: String,
+      confidence: Number
+    }]
+  },
+  // Performance Tracking & Weak Areas
+  performanceMetrics: {
+    // Topics identified as weak across all rounds
+    weakTopics: [{
+      topic: String,
+      occurrences: { type: Number, default: 1 },
+      firstIdentifiedAt: { type: String, enum: ['coding', 'technical', 'hr'] },
+      scores: [Number],
+      recommendedFocus: Boolean
+    }],
+    strongTopics: [{
+      topic: String,
+      occurrences: { type: Number, default: 1 },
+      scores: [Number]
+    }],
+    overallWeakness: [String],
+    overallStrength: [String],
+    // AI Agent Recommendations
+    agentRecommendations: {
+      interviewerAgent: {
+        areasToFocus: [String],
+        estimatedDifficultyGap: String,
+        suggestedTopics: [String]
+      },
+      codingEvaluator: {
+        weakTopics: [String],
+        suggestedProblems: [{
+          title: String,
+          topic: String,
+          difficulty: String
+        }],
+        estimatedTimeToMastery: String
+      },
+      hrBehavior: {
+        strengths: [String],
+        areasForGrowth: [String],
+        cultureAlignment: { type: Number, default: 0 }
+      }
+    }
   },
   // Overall Analytics
   overallScore: {
@@ -91,7 +173,50 @@ const placementSimulationSchema = new mongoose.Schema({
     default: Date.now
   },
   completedAt: Date,
-  recommendations: [String]
+  recommendations: [String],
+  // Phase 2 Agent Data - Mentor Agent
+  mentorInsights: {
+    performanceAnalysis: mongoose.Schema.Types.Mixed,
+    learningRoadmap: mongoose.Schema.Types.Mixed,
+    personalisedRecommendations: mongoose.Schema.Types.Mixed,
+    progressTracking: mongoose.Schema.Types.Mixed,
+    roadmapId: String,
+    roadmapStartedAt: Date,
+    roadmapCompletionPercentage: { type: Number, default: 0 }
+  },
+  // Phase 2 Agent Data - Company Simulation Agent
+  companySimulation: {
+    companyProfile: mongoose.Schema.Types.Mixed,
+    targetCompany: String,
+    targetRole: String,
+    customizedQuestions: mongoose.Schema.Types.Mixed,
+    behavioralQuestions: mongoose.Schema.Types.Mixed,
+    customizedFlow: mongoose.Schema.Types.Mixed,
+    companyFitAnalysis: mongoose.Schema.Types.Mixed,
+    companyFitScore: { type: Number, default: 0 },
+    cultureFitScore: { type: Number, default: 0 },
+    roleFitScore: { type: Number, default: 0 }
+  },
+  // Phase 2 Agent Data - Autonomous Task Agent
+  autonomousPlanning: {
+    taskPlanId: String,
+    taskPlan: mongoose.Schema.Types.Mixed,
+    currentWeek: { type: Number, default: 1 },
+    scheduledInterviews: mongoose.Schema.Types.Mixed,
+    completedTasks: [{
+      taskId: String,
+      completedAt: Date,
+      performanceScore: Number
+    }],
+    currentDifficulty: { type: String, default: 'medium' },
+    lastDifficultyAdjustment: Date,
+    nextScheduledReview: Date,
+    notifications: [{
+      type: String,
+      sentAt: Date,
+      message: String
+    }]
+  }
 }, {
   timestamps: true
 });

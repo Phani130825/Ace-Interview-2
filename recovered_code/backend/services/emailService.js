@@ -3,14 +3,32 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Create transporter with Gmail
+// Create transporter with Gmail OAuth2 (More Secure)
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
+    type: 'OAuth2',
     user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD // Use App Password, not regular password
+    clientId: process.env.GMAIL_CLIENT_ID,
+    clientSecret: process.env.GMAIL_CLIENT_SECRET,
+    refreshToken: process.env.GMAIL_REFRESH_TOKEN,
+    accessToken: process.env.GMAIL_ACCESS_TOKEN
   }
 });
+
+// Fallback to App Password if OAuth2 not configured
+if (!process.env.GMAIL_CLIENT_ID) {
+  console.log('OAuth2 not configured, falling back to App Password authentication');
+  const fallbackTransporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD
+    }
+  });
+  // Use fallback transporter
+  Object.assign(transporter, fallbackTransporter);
+}
 
 // Verify transporter configuration
 transporter.verify((error, success) => {

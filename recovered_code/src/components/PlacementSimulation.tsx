@@ -17,7 +17,7 @@ import {
   Award,
   BarChart3,
 } from "lucide-react";
-import api from "@/services/api";
+import api, { mentorAPI, companyAPI, taskAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import SimulationAptitude from "./simulation/SimulationAptitude";
 import SimulationCoding from "./simulation/SimulationCoding";
@@ -41,6 +41,8 @@ const PlacementSimulation = ({ onNavigate }: PlacementSimulationProps) => {
   const [simulation, setSimulation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [currentView, setCurrentView] = useState<string>("overview");
+  const [agentInsights, setAgentInsights] = useState<any>(null);
+  const [agentLoading, setAgentLoading] = useState(false);
 
   // Step-specific states
   const [resumeText, setResumeText] = useState("");
@@ -49,6 +51,77 @@ const PlacementSimulation = ({ onNavigate }: PlacementSimulationProps) => {
   useEffect(() => {
     loadActiveSimulation();
   }, []);
+
+  // Call Phase 2 agents when analytics view is loaded
+  useEffect(() => {
+    if (currentView === "analytics" && simulation && !agentInsights) {
+      callPhase2Agents();
+    }
+  }, [currentView, simulation]);
+
+  const callPhase2Agents = async () => {
+    if (!simulation || agentLoading) return;
+
+    try {
+      setAgentLoading(true);
+      const insights: any = {};
+
+      // Prepare simulation data for agents
+      const simulationData = {
+        userId: user?._id,
+        simulationId: simulation._id,
+        overallScore: simulation.overallScore,
+        steps: simulation.steps,
+        resumeData: simulation.resumeData,
+        performance: simulation.performance,
+      };
+
+      // Call Mentor Agent for learning insights
+      try {
+        console.log("📚 Calling Mentor Agent - Analyzing Placement Data");
+        const mentorResponse = await mentorAPI.analyzePlacement(simulationData);
+        if (mentorResponse.data.success) {
+          insights.mentor = mentorResponse.data.data;
+          console.log("✅ Mentor insights received:", mentorResponse.data.data);
+        }
+      } catch (error) {
+        console.error("❌ Mentor Agent error:", error);
+      }
+
+      // Call Company Simulation Agent for company profile
+      try {
+        console.log("🏢 Calling Company Simulation Agent - Creating Profile");
+        const companyResponse = await companyAPI.createProfile(simulationData);
+        if (companyResponse.data.success) {
+          insights.company = companyResponse.data.data;
+          console.log(
+            "✅ Company profile received:",
+            companyResponse.data.data,
+          );
+        }
+      } catch (error) {
+        console.error("❌ Company Agent error:", error);
+      }
+
+      // Call Task Agent for task planning
+      try {
+        console.log("📋 Calling Task Agent - Generating Task Plan");
+        const taskResponse = await taskAPI.generatePlan(simulationData);
+        if (taskResponse.data.success) {
+          insights.task = taskResponse.data.data;
+          console.log("✅ Task plan received:", taskResponse.data.data);
+        }
+      } catch (error) {
+        console.error("❌ Task Agent error:", error);
+      }
+
+      setAgentInsights(insights);
+    } catch (error) {
+      console.error("Error calling Phase 2 agents:", error);
+    } finally {
+      setAgentLoading(false);
+    }
+  };
 
   const loadActiveSimulation = async () => {
     try {
@@ -100,7 +173,7 @@ const PlacementSimulation = ({ onNavigate }: PlacementSimulationProps) => {
         `/placement-simulation/${simulation._id}/resume`,
         {
           resumeText: resumeText.trim(),
-        }
+        },
       );
 
       if (response.data.success) {
@@ -318,8 +391,8 @@ const PlacementSimulation = ({ onNavigate }: PlacementSimulationProps) => {
                     completed
                       ? "bg-gradient-to-br from-green-50 to-emerald-50 border-green-200"
                       : canStart
-                      ? "hover:shadow-lg cursor-pointer border-blue-200"
-                      : "opacity-50 cursor-not-allowed bg-gray-50"
+                        ? "hover:shadow-lg cursor-pointer border-blue-200"
+                        : "opacity-50 cursor-not-allowed bg-gray-50"
                   }`}
                   onClick={() => canStart && !completed && startStep(step.id)}
                 >
@@ -329,8 +402,8 @@ const PlacementSimulation = ({ onNavigate }: PlacementSimulationProps) => {
                         completed
                           ? "bg-green-500 text-white"
                           : isLocked
-                          ? "bg-gray-300 text-gray-500"
-                          : "bg-blue-500 text-white"
+                            ? "bg-gray-300 text-gray-500"
+                            : "bg-blue-500 text-white"
                       }`}
                     >
                       {completed ? (
@@ -661,7 +734,7 @@ const PlacementSimulation = ({ onNavigate }: PlacementSimulationProps) => {
                           "No answer"}
                       </p>
                     </div>
-                  )
+                  ),
                 )}
               </Card>
             )}
@@ -689,7 +762,7 @@ const PlacementSimulation = ({ onNavigate }: PlacementSimulationProps) => {
                           "No answer"}
                       </p>
                     </div>
-                  )
+                  ),
                 )}
               </Card>
             )}
@@ -715,8 +788,146 @@ const PlacementSimulation = ({ onNavigate }: PlacementSimulationProps) => {
                         {simulation.hrInterview.answers?.[idx] || "No answer"}
                       </p>
                     </div>
-                  )
+                  ),
                 )}
+              </Card>
+            )}
+
+            {/* Phase 2 Agent Insights Section */}
+            {agentLoading && (
+              <Card className="p-6 bg-blue-50 border-blue-200">
+                <div className="flex items-center gap-3">
+                  <div className="animate-spin h-5 w-5 text-blue-600">🔄</div>
+                  <p className="text-blue-700 font-medium">
+                    Loading AI agent insights...
+                  </p>
+                </div>
+              </Card>
+            )}
+
+            {/* Mentor Agent Insights */}
+            {agentInsights?.mentor && (
+              <Card className="p-6 bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200">
+                <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                  <TrendingUp className="h-6 w-6 text-blue-600" />
+                  📚 Mentor Agent - Learning Roadmap
+                </h3>
+                <div className="space-y-4">
+                  {agentInsights.mentor.performanceAnalysis && (
+                    <div>
+                      <p className="font-semibold text-gray-900 mb-2">
+                        Performance Analysis:
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {agentInsights.mentor.performanceAnalysis}
+                      </p>
+                    </div>
+                  )}
+                  {agentInsights.mentor.learningRoadmap && (
+                    <div>
+                      <p className="font-semibold text-gray-900 mb-2">
+                        Recommended Learning Path:
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {agentInsights.mentor.learningRoadmap}
+                      </p>
+                    </div>
+                  )}
+                  {agentInsights.mentor.recommendations && (
+                    <div>
+                      <p className="font-semibold text-gray-900 mb-2">
+                        Key Recommendations:
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {agentInsights.mentor.recommendations}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+
+            {/* Company Simulation Agent Insights */}
+            {agentInsights?.company && (
+              <Card className="p-6 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
+                <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                  <Briefcase className="h-6 w-6 text-green-600" />
+                  🏢 Company Simulation - Company Profile & Fit
+                </h3>
+                <div className="space-y-4">
+                  {agentInsights.company.companyProfile && (
+                    <div>
+                      <p className="font-semibold text-gray-900 mb-2">
+                        Company Profile:
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {agentInsights.company.companyProfile}
+                      </p>
+                    </div>
+                  )}
+                  {agentInsights.company.fitAnalysis && (
+                    <div>
+                      <p className="font-semibold text-gray-900 mb-2">
+                        Your Fit for this Company:
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {agentInsights.company.fitAnalysis}
+                      </p>
+                    </div>
+                  )}
+                  {agentInsights.company.recommendations && (
+                    <div>
+                      <p className="font-semibold text-gray-900 mb-2">
+                        Improvement Areas:
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {agentInsights.company.recommendations}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+
+            {/* Task Agent Insights */}
+            {agentInsights?.task && (
+              <Card className="p-6 bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200">
+                <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                  <Clock className="h-6 w-6 text-purple-600" />
+                  📋 Task Agent - Personalized Task Plan
+                </h3>
+                <div className="space-y-4">
+                  {agentInsights.task.taskPlan && (
+                    <div>
+                      <p className="font-semibold text-gray-900 mb-2">
+                        Recommended Tasks:
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {agentInsights.task.taskPlan}
+                      </p>
+                    </div>
+                  )}
+                  {agentInsights.task.schedule && (
+                    <div>
+                      <p className="font-semibold text-gray-900 mb-2">
+                        Suggested Schedule:
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {agentInsights.task.schedule}
+                      </p>
+                    </div>
+                  )}
+                  {agentInsights.task.nextSteps && (
+                    <div>
+                      <p className="font-semibold text-gray-900 mb-2">
+                        Next Steps:
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {agentInsights.task.nextSteps}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </Card>
             )}
           </div>

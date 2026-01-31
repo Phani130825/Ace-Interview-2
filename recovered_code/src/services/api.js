@@ -152,6 +152,45 @@ export const aiAPI = {
   getStatus: () => api.get('/ai/status'),
 };
 
+// Mentor Agent API (Phase 2)
+export const mentorAPI = {
+  analyzePlacement: (data) => api.post('/agents/mentor/analyze-placement', data),
+  generateRoadmap: (data) => api.post('/agents/mentor/generate-roadmap', data),
+  getRecommendations: (data) => api.post('/agents/mentor/recommendations', data),
+  trackProgress: (data) => api.post('/agents/mentor/track-progress', data),
+};
+
+// Company Simulation Agent API (Phase 2)
+export const companyAPI = {
+  createProfile: (data) => api.post('/agents/company/create-profile', data),
+  generateQuestions: (data) => api.post('/agents/company/generate-questions', data),
+  generateBehavioralQuestions: (data) => api.post('/agents/company/behavioral-questions', data),
+  customizeFlow: (data) => api.post('/agents/company/customize-flow', data),
+  analyzeFit: (data) => api.post('/agents/company/analyze-fit', data),
+};
+
+// Autonomous Task Agent API (Phase 2)
+export const taskAPI = {
+  generatePlan: (data) => api.post('/agents/task/generate-plan', data),
+  scheduleInterviews: (data) => api.post('/agents/task/schedule-interviews', data),
+  adjustDifficulty: (data) => api.post('/agents/task/adjust-difficulty', data),
+  trackCompletion: (data) => api.post('/agents/task/track-completion', data),
+  sendNotification: (data) => api.post('/agents/task/send-notification', data),
+};
+
+// Group Discussion API (Phase 3)
+export const groupDiscussionAPI = {
+  initializeDiscussion: (data) => api.post('/discussions/initialize', data),
+  sendMessage: (sessionId, data) => api.post(`/discussions/${sessionId}/message`, data),
+  askAgent: (sessionId, data) => api.post(`/discussions/${sessionId}/ask-agent`, data),
+  getConsensus: (sessionId) => api.get(`/discussions/${sessionId}/consensus`),
+  getSummary: (sessionId) => api.get(`/discussions/${sessionId}/summary`),
+  endDiscussion: (sessionId) => api.post(`/discussions/${sessionId}/end`, {}),
+  getAvailableAgents: () => api.get('/discussions/agents/available'),
+  getHistory: (discussionId) => api.get(`/discussions/history/${discussionId}`),
+  getUserDiscussions: () => api.get('/discussions/user/all')
+};
+
 // File upload helper
 export const uploadFile = async (file, onProgress) => {
   const formData = new FormData();

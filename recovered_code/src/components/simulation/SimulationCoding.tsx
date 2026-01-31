@@ -85,7 +85,7 @@ const SimulationCoding = ({
       if (response.success && response.data) {
         setQuestion(response.data);
         setCode(
-          response.data.starterCode?.python || "# Write your solution here"
+          response.data.starterCode?.python || "# Write your solution here",
         );
         setTestStarted(true);
       } else {
@@ -93,7 +93,7 @@ const SimulationCoding = ({
         alert(
           `Failed to generate question: ${
             response.error || "Invalid response format"
-          }`
+          }`,
         );
       }
     } catch (error: any) {
@@ -101,7 +101,7 @@ const SimulationCoding = ({
       alert(
         `Failed to generate question: ${
           error.response?.data?.error || error.message || "Unknown error"
-        }`
+        }`,
       );
     } finally {
       setLoading(false);
@@ -137,6 +137,55 @@ const SimulationCoding = ({
     const passedTests = testResults.filter((r) => r.passed).length;
     const totalTests = testResults.length;
     const percentage = (passedTests / totalTests) * 100;
+
+    // 🔍 AGENT DEBUGGING: Call coding evaluator agent
+    try {
+      const agentResponse = await api.post(`/api/agents/coding/analyze`, {
+        code,
+        language: "python",
+        problemStatement: question?.description || "Coding problem",
+      });
+
+      if (agentResponse.data.success) {
+        console.group(
+          "%c✅ CODING EVALUATOR AGENT RESPONSE",
+          "color: #ff6600; font-weight: bold; font-size: 14px",
+        );
+        console.log(
+          "%cCode Quality Analysis:",
+          "color: #ff6600; font-weight: bold",
+          agentResponse.data.data.codeQuality,
+        );
+        console.log(
+          "%cLogic Analysis:",
+          "color: #0066ff; font-weight: bold",
+          agentResponse.data.data.logicAnalysis,
+        );
+        console.log(
+          "%cComplexity Analysis:",
+          "color: #00cc66; font-weight: bold",
+          agentResponse.data.data.complexityAnalysis,
+        );
+        console.log(
+          "%c⚠️  WEAK TOPICS DETECTED:",
+          "color: #ff3333; font-weight: bold",
+          agentResponse.data.data.topicsIdentified,
+        );
+        console.table({
+          "Overall Code Score": agentResponse.data.data.overallScore,
+          Readability: agentResponse.data.data.codeQuality.readability,
+          Maintainability: agentResponse.data.data.codeQuality.maintainability,
+          "Time Complexity":
+            agentResponse.data.data.complexityAnalysis.timeComplexity,
+          "Space Complexity":
+            agentResponse.data.data.complexityAnalysis.spaceComplexity,
+          Verdict: agentResponse.data.data.verdict,
+        });
+        console.groupEnd();
+      }
+    } catch (error) {
+      console.warn("Coding evaluator agent not available:", error);
+    }
 
     setScore(percentage);
     setTestComplete(true);

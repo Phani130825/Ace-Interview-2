@@ -206,7 +206,7 @@ Return ONLY a valid JSON array with this EXACT structure (no markdown, no code b
         alert(
           `Failed to generate questions: ${
             response.error || "Invalid response format"
-          }`
+          }`,
         );
       }
     } catch (error: any) {
@@ -214,20 +214,90 @@ Return ONLY a valid JSON array with this EXACT structure (no markdown, no code b
       alert(
         `Failed to generate questions: ${
           error.response?.data?.error || error.message || "Unknown error"
-        }`
+        }`,
       );
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAnswer = () => {
+  const handleAnswer = async () => {
     if (!answer.trim()) return;
 
     const newResponses = [
       ...responses,
       { question: questions[currentQuestion], answer },
     ];
+
+    // 🔍 AGENT DEBUGGING: Log the answer to console
+    console.group(
+      `%c📝 ${interviewType.toUpperCase()} INTERVIEW - Question ${currentQuestion + 1}`,
+      "color: #00a8ff; font-weight: bold; font-size: 14px",
+    );
+    console.log(
+      "%cQuestion:",
+      "color: #0066ff; font-weight: bold",
+      questions[currentQuestion],
+    );
+    console.log("%cUser Answer:", "color: #00cc66; font-weight: bold", answer);
+    console.groupEnd();
+
+    // Call agent evaluation endpoint if agents are enabled
+    if (interviewType === "technical" || interviewType === "managerial") {
+      try {
+        const evaluationResponse = await api.post(
+          `/api/agents/interviewer/evaluate`,
+          {
+            question: questions[currentQuestion],
+            userAnswer: answer,
+            interviewType:
+              interviewType === "technical" ? "technical" : "managerial",
+          },
+        );
+
+        if (evaluationResponse.data.success) {
+          console.group(
+            "%c✅ INTERVIEWER AGENT RESPONSE",
+            "color: #ff6600; font-weight: bold; font-size: 14px",
+          );
+          console.log(
+            "%cDetailed Analysis:",
+            "color: #ff6600; font-weight: bold",
+            evaluationResponse.data.data,
+          );
+          console.table({
+            "Correctness Score": evaluationResponse.data.data.correctness,
+            "Completeness Score": evaluationResponse.data.data.completeness,
+            "Clarity Score": evaluationResponse.data.data.clarity,
+            "Depth Score": evaluationResponse.data.data.depth,
+            "Confidence Score": evaluationResponse.data.data.confidence,
+            "Overall Score": evaluationResponse.data.data.score,
+            "Recommended Difficulty":
+              evaluationResponse.data.data.recommendedDifficulty,
+            "Detected Topic": evaluationResponse.data.data.topic,
+          });
+          console.log(
+            "%cFeedback:",
+            "color: #ff6600; font-weight: bold",
+            evaluationResponse.data.data.feedback,
+          );
+          console.log(
+            "%cStrengths:",
+            "color: #00cc66; font-weight: bold",
+            evaluationResponse.data.data.strengths,
+          );
+          console.log(
+            "%cWeaknesses:",
+            "color: #ff3333; font-weight: bold",
+            evaluationResponse.data.data.weaknesses,
+          );
+          console.groupEnd();
+        }
+      } catch (error) {
+        console.error("Error calling interviewer agent:", error);
+      }
+    }
+
     setResponses(newResponses);
     setAnswer("");
 
@@ -270,6 +340,40 @@ Keep feedback under 80 characters. Use simple words only.`;
         console.warn("AI evaluation failed, using default values", response);
       }
 
+      // 🔍 AGENT DEBUGGING: Log final evaluation
+      console.group(
+        "%c🎯 INTERVIEW FINAL EVALUATION",
+        "color: #00cc66; font-weight: bold; font-size: 14px",
+      );
+      console.log(
+        "%cInterview Type:",
+        "color: #0066ff; font-weight: bold",
+        interviewType,
+      );
+      console.log(
+        "%cTotal Questions Asked:",
+        "color: #0066ff; font-weight: bold",
+        allResponses.length,
+      );
+      console.table(
+        allResponses.map((r, i) => ({
+          "Q#": i + 1,
+          Question: r.question.substring(0, 50) + "...",
+          "Answer Length": r.answer.length,
+        })),
+      );
+      console.log(
+        "%cFinal Score:",
+        "color: #ff6600; font-weight: bold",
+        `${finalScore}/100`,
+      );
+      console.log(
+        "%cFeedback:",
+        "color: #ff6600; font-weight: bold",
+        finalFeedback,
+      );
+      console.groupEnd();
+
       setScore(finalScore);
       setFeedback(finalFeedback);
       setInterviewComplete(true);
@@ -279,8 +383,8 @@ Keep feedback under 80 characters. Use simple words only.`;
         interviewType === "technical"
           ? "technical-interview"
           : interviewType === "managerial"
-          ? "managerial-interview"
-          : "hr-interview";
+            ? "managerial-interview"
+            : "hr-interview";
 
       await api.post(`/placement-simulation/${simulationId}/${endpoint}`, {
         questions,
@@ -305,8 +409,8 @@ Keep feedback under 80 characters. Use simple words only.`;
           interviewType === "technical"
             ? "technical-interview"
             : interviewType === "managerial"
-            ? "managerial-interview"
-            : "hr-interview";
+              ? "managerial-interview"
+              : "hr-interview";
 
         await api.post(`/placement-simulation/${simulationId}/${endpoint}`, {
           questions,
@@ -433,8 +537,8 @@ Keep feedback under 80 characters. Use simple words only.`;
               {interviewType === "technical"
                 ? "Continue to Managerial Round"
                 : interviewType === "managerial"
-                ? "Continue to HR Interview"
-                : "View Final Results"}
+                  ? "Continue to HR Interview"
+                  : "View Final Results"}
               <ArrowRight className="h-5 w-5 ml-2" />
             </Button>
           </Card>

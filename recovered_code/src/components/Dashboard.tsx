@@ -44,6 +44,7 @@ interface DashboardProps {
       | "pipelines"
       | "resume-pdf"
       | "performance"
+      | "group-discussion",
   ) => void;
 }
 
@@ -157,12 +158,12 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
             total: interviews.length,
             byType: {
               technical: interviews.filter(
-                (s: any) => s.interviewType === "technical"
+                (s: any) => s.interviewType === "technical",
               ).length,
               hr: interviews.filter((s: any) => s.interviewType === "hr")
                 .length,
               managerial: interviews.filter(
-                (s: any) => s.interviewType === "managerial"
+                (s: any) => s.interviewType === "managerial",
               ).length,
               ai: interviews.filter((s: any) => s.interviewType === "ai")
                 .length,
@@ -273,7 +274,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
                     ? `${Math.round(
                         (performanceStats.aptitude.averageScore +
                           performanceStats.coding.averageScore) /
-                          2
+                          2,
                       )}%`
                     : "0%"}
                 </p>
@@ -325,7 +326,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
                           performanceStats.coding.averageScore *
                             performanceStats.coding.total) /
                           (performanceStats.aptitude.total +
-                            performanceStats.coding.total)
+                            performanceStats.coding.total),
                       )
                     : 0}
                 </p>
@@ -540,6 +541,30 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
                   onClick={() => onNavigate("resume-pdf")}
                 >
                   Access Resume PDF Generator
+                </Button>
+              </div>
+
+              <div className="p-6 border rounded-xl bg-gradient-to-r from-pink-50 to-pink-100/50">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 bg-pink-100 rounded-xl flex items-center justify-center">
+                    <Video className="h-6 w-6 text-pink-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Group Discussion
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      Engage with 5 AI agents for multi-perspective discussions
+                      and insights
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="professional"
+                  className="w-full"
+                  onClick={() => onNavigate("group-discussion")}
+                >
+                  Start Group Discussion
                 </Button>
               </div>
             </div>

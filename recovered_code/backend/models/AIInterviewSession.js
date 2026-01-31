@@ -21,6 +21,17 @@ const aiInterviewSessionSchema = new mongoose.Schema({
       required: true
     }
   },
+  // Phase 2: Company Simulation Support
+  companyContext: {
+    companyProfile: mongoose.Schema.Types.Mixed,
+    companySize: String,
+    industry: String,
+    interviewStyle: String,
+    cultureFitCriteria: [String],
+    rolesExpectations: mongoose.Schema.Types.Mixed,
+    customizedQuestions: mongoose.Schema.Types.Mixed,
+    companyFitScore: Number
+  },
   interviewType: {
     type: String,
     enum: ['Technical', 'Managerial', 'HR', 'General', 'Technical Review', 'Behavioral'],

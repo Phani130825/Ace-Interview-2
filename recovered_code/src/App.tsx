@@ -12,6 +12,7 @@ import TechnicalInterviewSimulator from "./components/TechnicalInterviewSimulato
 import ResumePDFGenerator from "./components/ResumePDFGenerator";
 import PerformanceReport from "./components/PerformanceReport";
 import PlacementSimulation from "./components/PlacementSimulation";
+import GroupDiscussion from "./components/GroupDiscussion";
 
 const queryClient = new QueryClient();
 
@@ -43,6 +44,7 @@ const App = () => (
                 />
               }
             />
+            <Route path="/group-discussion" element={<GroupDiscussion />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
